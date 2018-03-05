@@ -46,7 +46,7 @@ struct BoidConstants{
 impl BoidConstants{
     fn new<T: Rng>(rng: &mut T) -> BoidConstants{
         BoidConstants{
-            vel: Range::new(2., 6.).ind_sample(rng),
+            vel: Range::new(3., 7.).ind_sample(rng),
             rot_accel: Deg(Range::new(0.5, 2.).ind_sample(rng)),
             rot_vel_max: Deg(Range::new(4., 8.).ind_sample(rng)),
             lookahead: Range::new(5., 15.).ind_sample(rng),
@@ -137,8 +137,15 @@ impl event::EventHandler for MainState {
     }
 }
 pub fn main() {
-    let c = conf::Conf::new();
-    let ctx = &mut Context::load_from_conf("super_simple", "ggez", c).unwrap();
+
+    let mut cb = ContextBuilder::new("chronox", "knipesteven")
+        .window_setup(conf::WindowSetup::default()
+            .title("Chronox!")
+        )
+        .window_mode(conf::WindowMode::default()
+            .dimensions(1920, 1080)
+        );
+    let ctx = &mut cb.build().unwrap();
     let state = &mut MainState::new(ctx).unwrap();
     event::run(ctx, state).unwrap();
 }
