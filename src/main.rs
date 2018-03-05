@@ -3,6 +3,33 @@
 extern crate ggez;
 use ggez::*;
 use ggez::graphics::{DrawMode, Point2};
+mod library;
+use library::*;
+use library::cgmath::*;
+
+struct globals{
+    mouse_loc: Point2
+}
+//static globs: globals;
+
+struct boidConstants{
+    vel: f32,
+    rotAccel: Deg<f32>,
+    rotVelMax: Deg<f32>,
+    lookahead: f32
+}
+struct boid{
+    loc: library::cgmath::Point2<f32>,
+    rot: Deg<f32>,
+    rotVel: Deg<f32>,
+    consts: boidConstants
+}
+impl boid{
+    fn update(&mut self, target: Point2){
+        let angle: Deg<f32> = pt_dir(self.loc, self.loc);
+        self.loc += lendir(self.consts.vel, angle);
+    }
+}
 
 struct MainState {
     pos_x: f32,
