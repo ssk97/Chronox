@@ -7,3 +7,4 @@ build = "build.rs"
 [dependencies]
 ggez = "0.4"
 cgmath = "0.16"
+rand = "0.4"
