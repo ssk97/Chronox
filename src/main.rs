@@ -28,10 +28,10 @@ fn pt_gfx(p: pt) -> PT{
 
 fn boid_mesh(ctx: &mut Context) -> GameResult<graphics::Mesh>{
     let mb = &mut graphics::MeshBuilder::new();
-    let verts = [PT::new(20., 0.),
-                              PT::new(-20., -5.),
-                              PT::new(-10., 0.),
-                              PT::new(-20., 5.),];
+    let verts = [PT::new(10., 0.),
+                              PT::new(-10., -5.),
+                              PT::new(-5., 0.),
+                              PT::new(-10., 5.),];
     mb.polygon(DrawMode::Fill, &verts);
     return mb.build(ctx);
 }
@@ -92,6 +92,7 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+        println!("({}) FPS: {}", self.boids.len(), 1_000_000_000./((timer::get_average_delta(_ctx).subsec_nanos()) as f64));
         for boid in &mut self.boids {
             boid.update(self.mouse);
         }
@@ -129,9 +130,18 @@ impl event::EventHandler for MainState {
                                y: i32) {
         if button == MouseButton::Left{
             let consts = BoidConstants::new(&mut thread_rng());
-            println!("new: {:?}", &consts);
+            //println!("new: {:?}", &consts);
             let boid = Boid::new(pt{x: x as f32, y: y as f32}, consts);
             self.boids.push(boid);
+        }
+
+        if button == MouseButton::Right{
+            for i in 0..100 {
+                let consts = BoidConstants::new(&mut thread_rng());
+                //println!("new: {:?}", &consts);
+                let boid = Boid::new(pt { x: x as f32, y: y as f32 }, consts);
+                self.boids.push(boid);
+            }
         }
 
     }
