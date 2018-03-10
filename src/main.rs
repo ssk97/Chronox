@@ -7,9 +7,13 @@ extern crate ggez;
 use ggez::*;
 use ggez::graphics::{DrawMode};
 use ggez::event::*;
+
 mod library;
 use library::*;
 use library::cgmath::*;
+
+extern crate petgraph;
+use petgraph::prelude::*;
 
 use ggez::graphics::Point2 as PT;
 #[allow(non_camel_case_types)]
@@ -60,6 +64,10 @@ struct Boid{
     stats: BoidConstants
 }
 impl Boid{
+    fn new_random(loc: pt) -> Boid{
+        let consts = BoidConstants::new(&mut thread_rng());
+        Boid{loc, dir:Deg(0.), rot_vel:Deg(0.), stats:consts}
+    }
     fn new(loc: pt, stats: BoidConstants) -> Boid{
         Boid{loc, dir:Deg(0.), rot_vel:Deg(0.), stats}
     }
@@ -73,28 +81,60 @@ impl Boid{
     }
 }
 
+
+struct Planet {
+    loc: pt,
+    boids: Vec<Boid>,
+    spawn_progress: f32
+}
+impl Planet{
+    fn new(loc: pt) -> Planet{
+        Planet{
+            loc,
+            boids: Vec::new(),
+            spawn_progress: 0.
+        }
+    }
+}
+struct Edge{
+    length: f32,
+    transfers: Vec<FollowPoint>
+}
+enum DIR{FORWARD, BACKWARD}
+struct FollowPoint{
+    direction: DIR,
+    progress: f32,
+    boids: Vec<Boid>
+}
 struct MainState {
     mouse: pt,
-    boids: Vec<Boid>,
+    mouse_drag: pt,
+    world: Graph<Planet, Edge>
 }
 
 impl MainState {
     fn new(_ctx: &mut Context) -> GameResult<MainState> {
-        let consts1 = BoidConstants{vel: 5., rot_accel: Deg(1.), rot_vel_max: Deg(10.), lookahead: 5.};
-        let boid1 = Boid::new(pt{x: 100., y: 100.}, consts1);
-        let consts2 = BoidConstants{vel: 4., rot_accel: Deg(0.5), rot_vel_max: Deg(5.), lookahead: 15.};
-        let boid2 = Boid::new(pt{x: 100., y: 200.}, consts2);
         let mouse_temp = pt{x: 0., y: 0.};
-        let s = MainState { boids: vec![boid1, boid2], mouse: mouse_temp};
+        let mut g = Graph::new();
+        g.add_node(Planet::new(pt{x: 100., y: 100.}));
+        let s = MainState { world: g, mouse: mouse_temp, mouse_drag: mouse_temp};
         Ok(s)
     }
 }
 
 impl event::EventHandler for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
-        println!("({}) FPS: {}", self.boids.len(), 1_000_000_000./((timer::get_average_delta(_ctx).subsec_nanos()) as f64));
-        for boid in &mut self.boids {
-            boid.update(self.mouse);
+        println!("FPS: {}", 1_000_000_000./((timer::get_average_delta(_ctx).subsec_nanos()) as f64));
+        for node_ind in self.world.node_indices(){
+            let node = &mut self.world[node_ind];
+            node.spawn_progress += 0.01;
+            if (node.spawn_progress >= 1.){
+                node.spawn_progress -= 1.;
+                node.boids.push(Boid::new_random(node.loc));
+            }
+            for boid in &mut node.boids{
+                boid.update(node.loc);
+            }
         }
         Ok(())
     }
@@ -102,12 +142,17 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
         let boid_mesh = boid_mesh(ctx)?;
-        for boid in &self.boids {
-            graphics::draw_ex(ctx, &boid_mesh,
-                              graphics::DrawParam {
-                                  dest: pt_gfx(boid.loc),
-                                  rotation: rads(boid.dir),
-                                  ..Default::default() })?;
+
+        for node_ind in self.world.node_indices(){
+            let node = &self.world[node_ind];
+            graphics::circle(ctx, DrawMode::Fill, pt_gfx(node.loc), 64., 0.5)?;
+            for boid in &node.boids{
+                graphics::draw_ex(ctx, &boid_mesh,
+                                  graphics::DrawParam {
+                                      dest: pt_gfx(boid.loc),
+                                      rotation: rads(boid.dir),
+                                      ..Default::default() })?;
+            }
         }
         graphics::present(ctx);
         Ok(())
@@ -129,26 +174,13 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            let consts = BoidConstants::new(&mut thread_rng());
-            //println!("new: {:?}", &consts);
-            let boid = Boid::new(pt{x: x as f32, y: y as f32}, consts);
-            self.boids.push(boid);
+            self.mouse_drag = pt { x: x as f32, y: y as f32 };
         }
-
-        if button == MouseButton::Right{
-            for i in 0..100 {
-                let consts = BoidConstants::new(&mut thread_rng());
-                //println!("new: {:?}", &consts);
-                let boid = Boid::new(pt { x: x as f32, y: y as f32 }, consts);
-                self.boids.push(boid);
-            }
-        }
-
     }
 }
 pub fn main() {
 
-    let mut cb = ContextBuilder::new("chronox", "knipesteven")
+    let cb = ContextBuilder::new("chronox", "knipesteven")
         .window_setup(conf::WindowSetup::default()
             .title("Chronox!")
         )

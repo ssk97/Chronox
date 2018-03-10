@@ -8,3 +8,7 @@ build = "build.rs"
 ggez = "0.4"
 cgmath = "0.16"
 rand = "0.4"
+petgraph = "0.4"
+
+[profile.dev]
+opt-level = 3
