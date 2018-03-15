@@ -15,6 +15,7 @@ use library::ggez::*;
 use library::ggez::graphics::*;
 use library::ggez::event::*;
 use library::ggez::nalgebra as na;
+type Ipt = na::Point2<i32>;
 
 extern crate petgraph;
 use petgraph::prelude::*;
@@ -29,52 +30,68 @@ extern crate serde_derive;
 fn pt(x: f32, y: f32) -> Point2{
     return Point2::new(x, y);
 }
+fn gpt(loc: Ipt) -> Point2{
+    return Point2::new(loc.x as f32, loc.y as f32);
+}
+fn ipt(x: i32, y: i32) -> Ipt{
+    return Ipt::new(x, y);
+}
 
 
 struct Planet {
-    loc: Point2,
+    loc: Ipt,
     count: u64,
-    spawn_progress: f32
+    spawn_progress: u32,
+    spawn_needed: u32
 }
 impl Planet{
-    fn new(loc: Point2) -> Planet{
+    fn new(loc: Ipt) -> Planet{
         Planet{
             loc,
             count: 0,
-            spawn_progress: 0.
+            spawn_progress: 0,
+            spawn_needed: 64
         }
     }
 }
 struct Edge{
-    //length: f32,
+    length: i32,
     transfers: Vec<ArmyGroup>
+}
+impl Edge{
+    fn new() -> Edge{
+        Edge{transfers: Vec::new(), length: 5000}
+    }
 }
 enum DIR{FORWARD, BACKWARD}
 struct ArmyGroup{
     direction: DIR,
-    progress: f32,
+    progress: i32,
     count: u64
 }
 
 struct GlobalResources{
     font: Font,
-    num: NumericFont
+    num_font: NumericFont,
+    small_num_font: NumericFont
 }
 impl GlobalResources{
     fn new(ctx: &mut Context) -> GameResult<GlobalResources>{
-        let f =  graphics::Font::new(ctx, "/Tuffy.ttf", 24)?;
-        let nf = NumericFont::new(ctx, &f)?;
-        let g = GlobalResources { font: f, num: nf};
+        let font =  graphics::Font::new(ctx, "/Tuffy.ttf", 24)?;
+        let num_font = NumericFont::new(ctx, &font)?;
+        let small_font =  graphics::Font::new(ctx, "/Tuffy.ttf", 16)?;
+        let small_num_font = NumericFont::new(ctx, &small_font)?;
+        let g = GlobalResources { font, num_font, small_num_font};
         Ok(g)
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Config{
-
+    army_speed: i32
 }
 struct MainState {
-    selected: Option<NodeIndex<u32>>,
+    selected: Option<NodeInd>,
     world: Graph<Planet, Edge, Undirected>,
     timestep: u64,
     resources: GlobalResources,
@@ -84,11 +101,11 @@ struct MainState {
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut g = Graph::new_undirected();
-        let node_a = g.add_node(Planet::new(pt(100., 100.)));
-        let node_b = g.add_node(Planet::new(pt(800., 200.)));
-        let node_c = g.add_node(Planet::new(pt(400., 600.)));
-        g.add_edge(node_a, node_b, Edge{transfers: Vec::new()});
-        g.add_edge(node_b, node_c, Edge{transfers: Vec::new()});
+        let node_a = g.add_node(Planet::new(ipt(100, 100)));
+        let node_b = g.add_node(Planet::new(ipt(800, 200)));
+        let node_c = g.add_node(Planet::new(ipt(400, 600)));
+        g.add_edge(node_a, node_b, Edge::new());
+        g.add_edge(node_b, node_c, Edge::new());
         let resources = GlobalResources::new(ctx)?;
         let mut conf_file = ctx.filesystem.open("/conf.toml")?;
         let mut buffer = Vec::new();
@@ -98,18 +115,18 @@ impl MainState {
         Ok(s)
     }
 
-    fn check_planets(&self, pos: Point2) -> Option<NodeIndex<u32>>{
-        let mut dist = 1.0/0.0;
+    fn check_planets(&self, pos: Ipt) -> Option<NodeInd>{
+        let mut dist = i32::max_value();
         let mut best = None;
         for node_ind in self.world.node_indices(){
             let node = &self.world[node_ind];
-            let tmpdist = na::distance_squared(&pos,&node.loc);
+            let tmpdist = dist2(&pos, &node.loc);
             if tmpdist < dist{
                 best = Some(node_ind);
                 dist = tmpdist;
             }
         }
-        if dist < 32.*32.{
+        if dist < 32*32{
             return best;
         } else {
             return None;
@@ -124,9 +141,9 @@ impl event::EventHandler for MainState {
             println!("{} - FPS: {}", self.timestep, timer::get_fps(_ctx));
         }
         for node in self.world.node_weights_mut(){
-            node.spawn_progress += 0.1;
-            if node.spawn_progress >= 1.{
-                node.spawn_progress -= 1.;
+            node.spawn_progress += 1;
+            if node.spawn_progress >= node.spawn_needed{
+                node.spawn_progress -= node.spawn_needed;
                 node.count += 1;
             }
         }
@@ -135,12 +152,10 @@ impl event::EventHandler for MainState {
             let mut transfer_set: Vec<(NodeInd, u64)> = Vec::new();
             {
                 let edge = &mut self.world[edge_ind];
+                let edge_len = edge.length;
                 for group in &mut edge.transfers {
-                    match group.direction {
-                        DIR::FORWARD => group.progress += 0.002,
-                        DIR::BACKWARD => group.progress -= 0.002
-                    }
-                    if group.progress > 1. || group.progress < 0. {
+                    group.progress += self.conf.army_speed;
+                    if group.progress > edge_len {
                         let ending;
                         match group.direction {
                             DIR::FORWARD => ending = t_ind,
@@ -149,7 +164,7 @@ impl event::EventHandler for MainState {
                         transfer_set.push((ending, group.count));
                     }
                 }
-                edge.transfers.retain(|ref f| !(f.progress > 1. || f.progress < 0.));
+                edge.transfers.retain(|ref f| !(f.progress > edge_len));
             }
             for removal in transfer_set{
                 let node = &mut self.world[removal.0];
@@ -161,25 +176,33 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
-
-        for node_ind in self.world.node_indices(){
-            let node = &self.world[node_ind];
-            graphics::circle(ctx, DrawMode::Fill, node.loc, 32., 0.5)?;
-            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
-            self.resources.num.draw_centered(ctx, node.loc, node.count as usize)?;
-            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
-        }
         for edge_ref in self.world.edge_references(){
             let s = &self.world[edge_ref.source()];
             let t = &self.world[edge_ref.target()];
-            graphics::line(ctx, &[s.loc, t.loc], 2.)?;
+            let s_loc = gpt(s.loc);
+            let t_loc = gpt(t.loc);
+            graphics::line(ctx, &[s_loc, t_loc], 2.)?;
             let edge = edge_ref.weight();
             for group in &edge.transfers{
-                let loc = s.loc + (t.loc - s.loc) * group.progress;
+                let f_progress = match group.direction {
+                    DIR::FORWARD => (group.progress as f32)/(edge.length as f32),
+                    DIR::BACKWARD => 1.0-((group.progress as f32)/(edge.length as f32))
+                };
+                let loc = s_loc + (t_loc - s_loc) * f_progress;
+                graphics::circle(ctx, DrawMode::Fill, loc, 16., 0.5)?;
                 set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
-                self.resources.num.draw_centered(ctx, loc, group.count as usize)?;
+                self.resources.small_num_font.draw_centered(ctx, loc, group.count as usize)?;
                 set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             }
+        }
+
+        for node_ind in self.world.node_indices(){
+            let node = &self.world[node_ind];
+            let node_loc = gpt(node.loc);
+            graphics::circle(ctx, DrawMode::Fill, node_loc, 32., 0.5)?;
+            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
+            self.resources.num_font.draw_centered(ctx, node_loc, node.count as usize)?;
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
         graphics::present(ctx);
         Ok(())
@@ -193,7 +216,7 @@ impl event::EventHandler for MainState {
                              y: i32) {
         if let Some(selected) = self.selected {
             if button == MouseButton::Left {
-                let next_o = self.check_planets(pt(x as f32, y as f32));
+                let next_o = self.check_planets(ipt(x, y));
                 if let Some(next) = next_o {
                     if next != selected {
                         if let Some((edge_ind, dir)) = self.world.find_edge_undirected(selected, next){
@@ -201,8 +224,8 @@ impl event::EventHandler for MainState {
                             let transfer_amount = node.count; // TODO: make percentage or something?
                             node.count -= transfer_amount;
                             let new_follow = match dir{
-                                Direction::Outgoing => ArmyGroup { direction: DIR::FORWARD, progress: 0., count: transfer_amount },
-                                Direction::Incoming => ArmyGroup { direction: DIR::BACKWARD, progress: 1., count: transfer_amount }
+                                Direction::Outgoing => ArmyGroup { direction: DIR::FORWARD, progress: 0, count: transfer_amount },
+                                Direction::Incoming => ArmyGroup { direction: DIR::BACKWARD, progress: 0, count: transfer_amount }
                             };
                             edge.transfers.push(new_follow);
                         }
@@ -219,7 +242,7 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            self.selected = self.check_planets(pt(x as f32, y as f32));
+            self.selected = self.check_planets(ipt(x, y));
         }
     }
 }

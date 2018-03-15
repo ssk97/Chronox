@@ -1,7 +1,18 @@
 pub extern crate ggez;
 use self::ggez::*;
 use self::ggez::graphics::*;
+use self::ggez::nalgebra as na;
+
+extern crate num_traits as num;
+
 use std::cmp::*;
+
+//returns the distance squared, generally meant for integer format
+pub fn dist2<T: na::Scalar+num::Num>(a: &na::Point2<T>, b: &na::Point2<T>) -> T{
+    let x = a.x-b.x;
+    let y = a.y-b.y;
+    (x*x)+(y*y)
+}
 
 pub struct NumericFont{ //Used for drawing rapidly-changing text via a pre-rendered font
     glyphs: Vec<Text>,
