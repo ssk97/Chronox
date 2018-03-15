@@ -1,42 +1,36 @@
-//! The simplest possible example that does something.
-extern crate rand;
+#![allow(dead_code)]
+/*extern crate rand;
 use rand::distributions::{IndependentSample, Range};
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng};*/
 
-extern crate ggez;
-use ggez::*;
-use ggez::graphics::{DrawMode};
-use ggez::event::*;
+
+use std::env;
+use std::path;
 
 mod library;
 use library::*;
-use library::cgmath::*;
+use library::ggez::*;
+use library::ggez::graphics::*;
+use library::ggez::event::*;
+use library::ggez::nalgebra as na;
 
 extern crate petgraph;
 use petgraph::prelude::*;
 type NodeInd = NodeIndex<u32>;
 type EdgeInd = EdgeIndex<u32>;
 
-use ggez::graphics::Point2 as PT;
-#[allow(non_camel_case_types)]
-type pt = Point2<f32>;
-#[allow(non_camel_case_types)]
-type deg = Deg<f32>;
+fn pt(x: f32, y: f32) -> Point2{
+    return Point2::new(x, y);
+}
 
-fn rads(angle: deg) -> f32{
-    return Rad::from(angle).0;
-}
-fn pt_gfx(p: pt) -> PT{
-    return PT::new(p.x, p.y);
-}
 
 struct Planet {
-    loc: pt,
+    loc: Point2,
     count: u64,
     spawn_progress: f32
 }
 impl Planet{
-    fn new(loc: pt) -> Planet{
+    fn new(loc: Point2) -> Planet{
         Planet{
             loc,
             count: 0,
@@ -55,30 +49,44 @@ struct ArmyGroup{
     count: u64
 }
 
+struct GlobalResources{
+    font: Font,
+    num: NumericFont
+}
+impl GlobalResources{
+    fn new(ctx: &mut Context) -> GameResult<GlobalResources>{
+        let f =  graphics::Font::new(ctx, "/Tuffy.ttf", 24)?;
+        let nf = NumericFont::new(ctx, &f)?;
+        let g = GlobalResources { font: f, num: nf};
+        Ok(g)
+    }
+}
+
 struct MainState {
     selected: Option<NodeIndex<u32>>,
     world: Graph<Planet, Edge, Undirected>,
-    timestep: u64
+    timestep: u64,
+    resources: GlobalResources
 }
 
 impl MainState {
     fn new(_ctx: &mut Context) -> GameResult<MainState> {
         let mut g = Graph::new_undirected();
-        let node_a = g.add_node(Planet::new(pt{x: 100., y: 100.}));
-        let node_b = g.add_node(Planet::new(pt{x: 800., y: 200.}));
-        let node_c = g.add_node(Planet::new(pt{x: 400., y: 600.}));
+        let node_a = g.add_node(Planet::new(pt(100., 100.)));
+        let node_b = g.add_node(Planet::new(pt(800., 200.)));
+        let node_c = g.add_node(Planet::new(pt(400., 600.)));
         g.add_edge(node_a, node_b, Edge{transfers: Vec::new()});
         g.add_edge(node_b, node_c, Edge{transfers: Vec::new()});
-        let s = MainState { world: g, selected: None, timestep: 0};
+        let s = MainState { world: g, selected: None, timestep: 0, resources: GlobalResources::new(_ctx)?};
         Ok(s)
     }
 
-    fn check_planets(&self, pos: pt) -> Option<NodeIndex<u32>>{
+    fn check_planets(&self, pos: Point2) -> Option<NodeIndex<u32>>{
         let mut dist = 1.0/0.0;
         let mut best = None;
         for node_ind in self.world.node_indices(){
             let node = &self.world[node_ind];
-            let tmpdist = pos.distance2(node.loc);
+            let tmpdist = na::distance_squared(&pos,&node.loc);
             if tmpdist < dist{
                 best = Some(node_ind);
                 dist = tmpdist;
@@ -107,27 +115,21 @@ impl event::EventHandler for MainState {
         }
         for edge_ind in self.world.edge_indices(){
             let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
-            let (s_loc, t_loc);{
-                let (s, t) = (&self.world[s_ind], &self.world[t_ind]);
-                s_loc = s.loc;
-                t_loc = t.loc;
-            }
             let mut transfer_set: Vec<(NodeInd, u64)> = Vec::new();
             {
                 let edge = &mut self.world[edge_ind];
-                for follows in &mut edge.transfers {
-                    match follows.direction {
-                        DIR::FORWARD => follows.progress += 0.002,
-                        DIR::BACKWARD => follows.progress -= 0.002
+                for group in &mut edge.transfers {
+                    match group.direction {
+                        DIR::FORWARD => group.progress += 0.002,
+                        DIR::BACKWARD => group.progress -= 0.002
                     }
-                    let loc = s_loc + (t_loc - s_loc) * follows.progress;
-                    if follows.progress > 1. || follows.progress < 0. {
+                    if group.progress > 1. || group.progress < 0. {
                         let ending;
-                        match follows.direction {
+                        match group.direction {
                             DIR::FORWARD => ending = t_ind,
                             DIR::BACKWARD => ending = s_ind
                         }
-                        transfer_set.push((ending, follows.count));
+                        transfer_set.push((ending, group.count));
                     }
                 }
                 edge.transfers.retain(|ref f| !(f.progress > 1. || f.progress < 0.));
@@ -143,17 +145,23 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
 
-        for node in self.world.node_weights_mut(){
-            graphics::circle(ctx, DrawMode::Fill, pt_gfx(node.loc), 32., 0.5)?;
-            //TODO: draw count
+        for node_ind in self.world.node_indices(){
+            let node = &self.world[node_ind];
+            graphics::circle(ctx, DrawMode::Fill, node.loc, 32., 0.5)?;
+            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
+            self.resources.num.draw_centered(ctx, node.loc, node.count as usize)?;
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
-        for edge in self.world.edge_references(){
-            let s = &self.world[edge.source()];
-            let t = &self.world[edge.target()];
-            graphics::line(ctx, &[pt_gfx(s.loc), pt_gfx(t.loc)], 2.)?;
-            let edgeWeight = edge.weight();
-            for follows in &edgeWeight.transfers{
-                //TODO: drawa count and point
+        for edge_ref in self.world.edge_references(){
+            let s = &self.world[edge_ref.source()];
+            let t = &self.world[edge_ref.target()];
+            graphics::line(ctx, &[s.loc, t.loc], 2.)?;
+            let edge = edge_ref.weight();
+            for group in &edge.transfers{
+                let loc = s.loc + (t.loc - s.loc) * group.progress;
+                set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
+                self.resources.num.draw_centered(ctx, loc, group.count as usize)?;
+                set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             }
         }
         graphics::present(ctx);
@@ -168,16 +176,16 @@ impl event::EventHandler for MainState {
                              y: i32) {
         if let Some(selected) = self.selected {
             if button == MouseButton::Left {
-                let next_o = self.check_planets(pt { x: x as f32, y: y as f32 });
+                let next_o = self.check_planets(pt(x as f32, y as f32));
                 if let Some(next) = next_o {
                     if next != selected {
                         if let Some((edge_ind, dir)) = self.world.find_edge_undirected(selected, next){
                             let (edge, node) = self.world.index_twice_mut(edge_ind, selected);
-                            let transferAmount = node.count; // TODO: make percentage or something?
-                            node.count -= transferAmount;
+                            let transfer_amount = node.count; // TODO: make percentage or something?
+                            node.count -= transfer_amount;
                             let new_follow = match dir{
-                                Direction::Outgoing => ArmyGroup { direction: DIR::FORWARD, progress: 0., count: transferAmount },
-                                Direction::Incoming => ArmyGroup { direction: DIR::BACKWARD, progress: 1., count: transferAmount }
+                                Direction::Outgoing => ArmyGroup { direction: DIR::FORWARD, progress: 0., count: transfer_amount },
+                                Direction::Incoming => ArmyGroup { direction: DIR::BACKWARD, progress: 1., count: transfer_amount }
                             };
                             edge.transfers.push(new_follow);
                         }
@@ -194,7 +202,7 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            self.selected = self.check_planets(pt{x: x as f32, y: y as f32});
+            self.selected = self.check_planets(pt(x as f32, y as f32));
         }
     }
 }
@@ -208,6 +216,12 @@ pub fn main() {
             .dimensions(1920, 1080)
         );
     let ctx = &mut cb.build().unwrap();
+
+    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+        let mut path = path::PathBuf::from(manifest_dir);
+        path.push("resources");
+        ctx.filesystem.mount(&path, true);
+    }
     let state = &mut MainState::new(ctx).unwrap();
     event::run(ctx, state).unwrap();
 }
