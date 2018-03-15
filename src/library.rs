@@ -21,7 +21,6 @@ pub fn pt_dir<T, A>(from: Point2 <T>, to: Point2 <T>) -> A
 where T: BaseFloat, A: Angle<Unitless = T>, {
     let offset: Vector2<T> = to - from;
     return A::atan2(offset.y, offset.x);
-
 }
 pub fn lendir<T, A>(len: T, dir: A) -> Vector2 <T>
 where T: BaseFloat, A: Angle<Unitless = T>, {

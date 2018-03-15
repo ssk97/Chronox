@@ -14,6 +14,8 @@ use library::cgmath::*;
 
 extern crate petgraph;
 use petgraph::prelude::*;
+type NodeInd = NodeIndex<u32>;
+type EdgeInd = EdgeIndex<u32>;
 
 use ggez::graphics::Point2 as PT;
 #[allow(non_camel_case_types)]
@@ -50,10 +52,10 @@ struct BoidConstants{
 impl BoidConstants{
     fn new<T: Rng>(rng: &mut T) -> BoidConstants{
         BoidConstants{
-            vel: Range::new(3., 7.).ind_sample(rng),
-            rot_accel: Deg(Range::new(0.5, 2.).ind_sample(rng)),
-            rot_vel_max: Deg(Range::new(4., 8.).ind_sample(rng)),
-            lookahead: Range::new(5., 15.).ind_sample(rng),
+            vel: Range::new(4., 6.).ind_sample(rng),
+            rot_accel: Deg(Range::new(0.5, 4.).ind_sample(rng)),
+            rot_vel_max: Deg(Range::new(6., 10.).ind_sample(rng)),
+            lookahead: Range::new(0., 10.).ind_sample(rng),
         }
     }
 }
@@ -64,12 +66,13 @@ struct Boid{
     stats: BoidConstants
 }
 impl Boid{
+    fn new(loc: pt, stats: BoidConstants) -> Boid{
+        let dir = Deg(Range::new(0., 360.).ind_sample(&mut thread_rng()));
+        Boid{loc, dir, rot_vel:Deg(0.), stats}
+    }
     fn new_random(loc: pt) -> Boid{
         let consts = BoidConstants::new(&mut thread_rng());
-        Boid{loc, dir:Deg(0.), rot_vel:Deg(0.), stats:consts}
-    }
-    fn new(loc: pt, stats: BoidConstants) -> Boid{
-        Boid{loc, dir:Deg(0.), rot_vel:Deg(0.), stats}
+        Boid::new(loc, consts)
     }
     fn update(&mut self, target: pt){
         let ahead = self.loc + (lendir(self.stats.vel, self.dir)*self.stats.lookahead);
@@ -97,7 +100,7 @@ impl Planet{
     }
 }
 struct Edge{
-    length: f32,
+    //length: f32,
     transfers: Vec<FollowPoint>
 }
 enum DIR{FORWARD, BACKWARD}
@@ -106,34 +109,96 @@ struct FollowPoint{
     progress: f32,
     boids: Vec<Boid>
 }
+
 struct MainState {
-    mouse: pt,
-    mouse_drag: pt,
-    world: Graph<Planet, Edge>
+    selected: Option<NodeIndex<u32>>,
+    world: Graph<Planet, Edge, Undirected>,
+    timestep: u64
 }
 
 impl MainState {
     fn new(_ctx: &mut Context) -> GameResult<MainState> {
-        let mouse_temp = pt{x: 0., y: 0.};
-        let mut g = Graph::new();
-        g.add_node(Planet::new(pt{x: 100., y: 100.}));
-        let s = MainState { world: g, mouse: mouse_temp, mouse_drag: mouse_temp};
+        let mut g = Graph::new_undirected();
+        let node_a = g.add_node(Planet::new(pt{x: 100., y: 100.}));
+        let node_b = g.add_node(Planet::new(pt{x: 800., y: 200.}));
+        let node_c = g.add_node(Planet::new(pt{x: 400., y: 600.}));
+        g.add_edge(node_a, node_b, Edge{transfers: Vec::new()});
+        g.add_edge(node_b, node_c, Edge{transfers: Vec::new()});
+        let s = MainState { world: g, selected: None, timestep: 0};
         Ok(s)
+    }
+
+    fn check_planets(&self, pos: pt) -> Option<NodeIndex<u32>>{
+        let mut dist = 1.0/0.0;
+        let mut best = None;
+        for node_ind in self.world.node_indices(){
+            let node = &self.world[node_ind];
+            let tmpdist = pos.distance2(node.loc);
+            if tmpdist < dist{
+                best = Some(node_ind);
+                dist = tmpdist;
+            }
+        }
+        if dist < 32.*32.{
+            return best;
+        } else {
+            return None;
+        }
     }
 }
 
 impl event::EventHandler for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
-        println!("FPS: {}", 1_000_000_000./((timer::get_average_delta(_ctx).subsec_nanos()) as f64));
-        for node_ind in self.world.node_indices(){
-            let node = &mut self.world[node_ind];
-            node.spawn_progress += 0.01;
-            if (node.spawn_progress >= 1.){
+        self.timestep += 1;
+        if self.timestep % 120 == 0 {
+            println!("{} - FPS: {}", self.timestep, timer::get_fps(_ctx));
+        }
+        for node in self.world.node_weights_mut(){
+            node.spawn_progress += 0.1;
+            if node.spawn_progress >= 1.{
                 node.spawn_progress -= 1.;
                 node.boids.push(Boid::new_random(node.loc));
             }
             for boid in &mut node.boids{
                 boid.update(node.loc);
+            }
+        }
+        for edge_ind in self.world.edge_indices(){
+            let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
+            let (s_loc, t_loc);{
+                let (s, t) = (&self.world[s_ind], &self.world[t_ind]);
+                s_loc = s.loc;
+                t_loc = t.loc;
+            }
+            let mut transfer_set: Vec<(NodeInd, usize)> = Vec::new();
+            {
+                let edge = &mut self.world[edge_ind];
+                for (transfer_ind, follows) in edge.transfers.iter_mut().enumerate() {
+                    match follows.direction {
+                        DIR::FORWARD => follows.progress += 0.002,
+                        DIR::BACKWARD => follows.progress -= 0.002
+                    }
+                    let loc = s_loc + (t_loc - s_loc) * follows.progress;
+                    for boid in &mut follows.boids {
+                        boid.update(loc);
+                    }
+                    if follows.progress > 1. || follows.progress < 0. {
+                        let ending;
+                        match follows.direction {
+                            DIR::FORWARD => ending = t_ind,
+                            DIR::BACKWARD => ending = s_ind
+                        }
+                        transfer_set.push((ending, transfer_ind));
+                    }
+                }
+            }
+            for removal in transfer_set{
+                let (node, edge) = self.world.index_twice_mut(removal.0, edge_ind);
+                node.boids.append(&mut edge.transfers[removal.1].boids);
+            }
+            {
+                let edge = &mut self.world[edge_ind];
+                edge.transfers.retain(|ref f| !(f.progress > 1. || f.progress < 0.));
             }
         }
         Ok(())
@@ -143,9 +208,8 @@ impl event::EventHandler for MainState {
         graphics::clear(ctx);
         let boid_mesh = boid_mesh(ctx)?;
 
-        for node_ind in self.world.node_indices(){
-            let node = &self.world[node_ind];
-            graphics::circle(ctx, DrawMode::Fill, pt_gfx(node.loc), 64., 0.5)?;
+        for node in self.world.node_weights_mut(){
+            graphics::circle(ctx, DrawMode::Fill, pt_gfx(node.loc), 32., 0.5)?;
             for boid in &node.boids{
                 graphics::draw_ex(ctx, &boid_mesh,
                                   graphics::DrawParam {
@@ -154,18 +218,50 @@ impl event::EventHandler for MainState {
                                       ..Default::default() })?;
             }
         }
+        for edge in self.world.edge_references(){
+            let s = &self.world[edge.source()];
+            let t = &self.world[edge.target()];
+            graphics::line(ctx, &[pt_gfx(s.loc), pt_gfx(t.loc)], 2.)?;
+            let edgeWeight = edge.weight();
+            for follows in &edgeWeight.transfers{
+                for boid in &follows.boids{
+                    graphics::draw_ex(ctx, &boid_mesh,
+                                      graphics::DrawParam {
+                                          dest: pt_gfx(boid.loc),
+                                          rotation: rads(boid.dir),
+                                          ..Default::default() })?;
+                }
+            }
+        }
         graphics::present(ctx);
         Ok(())
     }
 
-    fn mouse_motion_event(&mut self,
-                          _ctx: &mut Context,
-                          _state: MouseState,
-                          x: i32,
-                          y: i32,
-                          _xrel: i32,
-                          _yrel: i32) {
-        self.mouse = pt { x: x as f32, y: y as f32 };
+
+    fn mouse_button_up_event(&mut self,
+                             _ctx: &mut Context,
+                             button: MouseButton,
+                             x: i32,
+                             y: i32) {
+        if let Some(selected) = self.selected {
+            if button == MouseButton::Left {
+                let next_o = self.check_planets(pt { x: x as f32, y: y as f32 });
+                if let Some(next) = next_o {
+                    if next != selected {
+                        if let Some((edge_ind, dir)) = self.world.find_edge_undirected(selected, next){
+                            let (edge, node) = self.world.index_twice_mut(edge_ind, selected);
+                            let boid_vec = node.boids.drain(..).collect();//TODO: change from drain all to specified amount
+                            let new_follow = match dir{
+                                Direction::Outgoing => FollowPoint { direction: DIR::FORWARD, progress: 0., boids: boid_vec },
+                                Direction::Incoming => FollowPoint { direction: DIR::BACKWARD, progress: 1., boids: boid_vec }
+                            };
+                            edge.transfers.push(new_follow);
+                        }
+                    }
+                }
+            }
+        }
+        self.selected = None;
     }
 
     fn mouse_button_down_event(&mut self,
@@ -174,7 +270,7 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            self.mouse_drag = pt { x: x as f32, y: y as f32 };
+            self.selected = self.check_planets(pt{x: x as f32, y: y as f32});
         }
     }
 }
