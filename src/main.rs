@@ -6,6 +6,8 @@ use rand::{thread_rng, Rng};*/
 
 use std::env;
 use std::path;
+use std::io::Read;
+use std::io::Write;
 
 mod library;
 use library::*;
@@ -18,6 +20,11 @@ extern crate petgraph;
 use petgraph::prelude::*;
 type NodeInd = NodeIndex<u32>;
 type EdgeInd = EdgeIndex<u32>;
+
+extern crate toml;
+extern crate bincode;
+#[macro_use]
+extern crate serde_derive;
 
 fn pt(x: f32, y: f32) -> Point2{
     return Point2::new(x, y);
@@ -62,22 +69,32 @@ impl GlobalResources{
     }
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct Config{
+
+}
 struct MainState {
     selected: Option<NodeIndex<u32>>,
     world: Graph<Planet, Edge, Undirected>,
     timestep: u64,
-    resources: GlobalResources
+    resources: GlobalResources,
+    conf: Config
 }
 
 impl MainState {
-    fn new(_ctx: &mut Context) -> GameResult<MainState> {
+    fn new(ctx: &mut Context) -> GameResult<MainState> {
         let mut g = Graph::new_undirected();
         let node_a = g.add_node(Planet::new(pt(100., 100.)));
         let node_b = g.add_node(Planet::new(pt(800., 200.)));
         let node_c = g.add_node(Planet::new(pt(400., 600.)));
         g.add_edge(node_a, node_b, Edge{transfers: Vec::new()});
         g.add_edge(node_b, node_c, Edge{transfers: Vec::new()});
-        let s = MainState { world: g, selected: None, timestep: 0, resources: GlobalResources::new(_ctx)?};
+        let resources = GlobalResources::new(ctx)?;
+        let mut conf_file = ctx.filesystem.open("/conf.toml")?;
+        let mut buffer = Vec::new();
+        conf_file.read_to_end(&mut buffer)?;
+        let conf = toml::from_slice(&buffer).unwrap();
+        let s = MainState { world: g, selected: None, timestep: 0, resources, conf };
         Ok(s)
     }
 
