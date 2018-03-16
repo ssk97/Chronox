@@ -47,8 +47,8 @@ use std::default::Default;
 impl Default for Config{
     fn default() -> Config{
         let system = SystemConfig{tick_rate: 10, command_delay: 4};
-        let render = RenderConfig{colors: [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
-        let game = GameConfig{army_speed: 10};
+        let render = RenderConfig{colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
+        let game = GameConfig{army_speed: 100};
         Config{
             system, render, game
         }
@@ -68,14 +68,7 @@ impl MainState {
         let mut conf_file = ctx.filesystem.open("/conf.toml")?;
         let mut buffer = Vec::new();
         conf_file.read_to_end(&mut buffer)?;
-        let conf_check = toml::from_slice(&buffer);
-        if conf_check.is_err(){
-            let mut def_config = ctx.filesystem.create("/default_conf.toml")?;
-            let config: Config = Default::default();
-            let toml_data = toml::to_string(&config).unwrap();
-            def_config.write_all(toml_data.as_bytes())?;
-        }
-        let conf:Config = conf_check.unwrap_or_default();
+        let conf: Config = toml::from_slice(&buffer).unwrap_or_default();
         let sim = Simulation::new();
         let renderer = Renderer::new(ctx)?;
         let mut orders = VecDeque::new();

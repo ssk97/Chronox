@@ -7,7 +7,7 @@ use std::f32::consts::PI;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RenderConfig{
-    pub colors: [u32;MAX_SIDES]
+    pub colors: Vec<u32>
 }
 
 struct GlobalResources{
@@ -27,7 +27,7 @@ impl GlobalResources{
 }
 
 fn set_col(ctx: &mut Context, conf: &RenderConfig, player: Player) -> GameResult<()>{
-    let col = conf.colors[player];
+    let col = conf.colors[player as usize];
     set_color(ctx, Color::from_rgb_u32(col))?;
     Ok(())
 }
@@ -65,9 +65,9 @@ impl Renderer {
         for node_ind in sim.world.node_indices() {
             let node = &sim.world[node_ind];
             let node_loc = gpt(node.loc);
-            graphics::circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.5)?;
+            graphics::circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.25)?;
             set_col(ctx, conf, node.owner)?;
-            graphics::circle(ctx, DrawMode::Line(1.0), node_loc, node.owner_strength as f32, 0.5)?;
+            graphics::circle(ctx, DrawMode::Line(5.0), node_loc, node.owner_strength as f32, 0.25)?;
             //TODO: handle multi-player count
             let involved = find_sides_node(node);
             if involved.len() == 1 {

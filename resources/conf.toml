@@ -3,7 +3,8 @@ tick_rate = 10
 command_delay = 4
 
 [render]
-colors = [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]
+#hex colors [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]
+colors = [8421504, 16711680, 65280, 255, 12632064]
 
 [game]
-army_speed = 10
+army_speed = 100
