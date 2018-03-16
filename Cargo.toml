@@ -21,6 +21,6 @@ toml = "0.4"
 plain_enum = "0.4.0"
 
 [profile.dev]
-opt-level = 2
+opt-level = 0
 
 [profile.release]

@@ -40,8 +40,10 @@ pub struct Planet {
     pub count: [u32;MAX_SIDES],
     pub fight_progess: [u32;MAX_SIDES],
     pub owner: Player,
+    pub owner_strength: u32,
+    pub max_strength: u32,
     pub spawn_progress: u32,
-    pub spawn_needed: u32
+    pub spawn_needed: u32,
 }
 impl Planet{
     pub fn new(loc: Ipt) -> Planet{
@@ -53,8 +55,10 @@ impl Planet{
             fight_progess: [0;MAX_SIDES],
 
             owner: Player::PASSIVE,
+            owner_strength: 64,
+            max_strength: 64,
             spawn_progress: 0,
-            spawn_needed: 64
+            spawn_needed: 64,
         }
     }
 }
@@ -93,15 +97,6 @@ pub struct Order{
     pub command: CommandEnum
 }
 
-pub fn count_sides_node(node: &Planet) -> u8{
-    let mut sides_found:u8 = 0;
-    for p in Player::values(){
-        if node.count[p] > 0{
-            sides_found += 1;
-        }
-    }
-    sides_found
-}
 pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     let mut sides_found = Vec::new();
     for p in Player::values(){
@@ -149,9 +144,6 @@ impl Simulation{
             }
         }
     }
-    pub fn count_sides(&self, node: NodeInd) -> u8{
-        count_sides_node(&self.world[node])
-    }
     pub fn find_sides(&self, node: NodeInd) -> Vec<Player>{
         find_sides_node(&self.world[node])
     }
@@ -190,14 +182,36 @@ impl Simulation{
                     node.spawn_progress -= node.spawn_needed;
                     node.count[node.owner] += 1;
                 }
+            } else {
+                node.spawn_progress = 0;
             }
             //fight!
-            let sides_found = count_sides_node(node);
-            if sides_found < 2{//zero out all fighting progress if only one side
+            let sides_found = find_sides_node(node);
+            let sides_count = sides_found.len();
+            if sides_count < 2{//zero out all fighting progress if no battle
                 node.fight_progess = [0;MAX_SIDES];
+                if sides_count == 1{//and advance ownership of the winner
+                    if node.count[node.owner] == 0 {//owner has lost
+                        node.owner_strength -= 1;
+                        if node.owner_strength <= 0{
+                            if node.owner == Player::PASSIVE{
+                                node.owner = sides_found[0];
+                            } else {
+                                node.owner = Player::PASSIVE;
+                                node.owner_strength = node.max_strength;
+                            }
+                        }
+                    } else {//owner has won
+                        if node.owner_strength <= node.max_strength {
+                            node.owner_strength += 1
+                        }
+                    }
+                }
             } else {
+                //otherwise, do fighting
                 let mut total_removal = 0;
-                for p in Player::values(){
+                for p_ref in &sides_found{
+                    let p = *p_ref;
                     node.fight_progess[p] += node.count[p];//TODO: modify algorithm?
                     let kills = node.fight_progess[p]/100;
                     if kills > 0 {
@@ -207,7 +221,8 @@ impl Simulation{
                     }
                 }
                 if total_removal > 0 {
-                    for p in Player::values() {
+                    for p_ref in &sides_found {
+                        let p = *p_ref;
                         if node.count[p] > total_removal {
                             node.count[p] -= total_removal;
                         } else {

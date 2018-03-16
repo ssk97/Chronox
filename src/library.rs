@@ -22,10 +22,10 @@ pub fn dist2<T: na::Scalar+num::Num>(a: &na::Point2<T>, b: &na::Point2<T>) -> T{
     let y = a.y-b.y;
     (x*x)+(y*y)
 }
-pub fn lendir(len: f32, dir: f32) -> Point2
+pub fn lendir(len: f32, dir: f32) -> Vector2
 {
     let (y, x) = dir.sin_cos();
-    return vec2(x, y)*len;
+    Vector2::new(x*len, y*len)
 }
 
 pub struct NumericFont{ //Used for drawing rapidly-changing text via a pre-rendered font

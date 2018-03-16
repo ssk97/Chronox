@@ -10,7 +10,7 @@ use std::env;
 use std::path;
 use std::io::Read;
 use std::collections::VecDeque;
-//use std::io::Write;
+use std::io::Write;
 extern crate ggez;
 use ggez::*;
 use ggez::event::*;
@@ -34,7 +34,7 @@ extern crate serde_derive;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct SystemConfig{
-    tick_time: u64, //in ms
+    tick_rate: u32,
     command_delay: usize
 }
 #[derive(Serialize, Deserialize, Debug)]
@@ -46,7 +46,7 @@ struct Config{
 use std::default::Default;
 impl Default for Config{
     fn default() -> Config{
-        let system = SystemConfig{tick_time: 100, command_delay: 4};
+        let system = SystemConfig{tick_rate: 10, command_delay: 4};
         let render = RenderConfig{colors: [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
         let game = GameConfig{army_speed: 10};
         Config{
@@ -65,11 +65,18 @@ struct MainState {
 
 impl MainState {
     fn new(ctx: &mut Context) -> GameResult<MainState> {
-        let sim = Simulation::new();
         let mut conf_file = ctx.filesystem.open("/conf.toml")?;
         let mut buffer = Vec::new();
         conf_file.read_to_end(&mut buffer)?;
-        let conf:Config = toml::from_slice(&buffer).unwrap_or_default();
+        let conf_check = toml::from_slice(&buffer);
+        if conf_check.is_err(){
+            let mut def_config = ctx.filesystem.create("/default_conf.toml")?;
+            let config: Config = Default::default();
+            let toml_data = toml::to_string(&config).unwrap();
+            def_config.write_all(toml_data.as_bytes())?;
+        }
+        let conf:Config = conf_check.unwrap_or_default();
+        let sim = Simulation::new();
         let renderer = Renderer::new(ctx)?;
         let mut orders = VecDeque::new();
         for _ in 0..conf.system.command_delay{
@@ -82,14 +89,16 @@ impl MainState {
 }
 
 impl event::EventHandler for MainState {
-    fn update(&mut self, _ctx: &mut Context) -> GameResult<()> {
+    fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         self.frame += 1;
         if self.frame % 120 == 0 {
-            println!("{} - FPS: {}", self.frame, timer::get_fps(_ctx));
+            println!("{} - FPS: {}", self.frame, timer::get_fps(ctx));
         }
-        self.orders.push_back(Vec::new());
-        self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
-        self.sim.update(&self.conf.game);
+        while timer::check_update_time(ctx, self.conf.system.tick_rate) {
+            self.orders.push_back(Vec::new());
+            self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
+            self.sim.update(&self.conf.game);
+        }
         Ok(())
     }
 
@@ -108,7 +117,7 @@ impl event::EventHandler for MainState {
                              y: i32) {
         if let Some(selected) = self.selected {
             if button == MouseButton::Left {
-                let next_o = check_planets(&self.sim, ipt(x, y), 32);
+                let next_o = check_planets(&self.sim, ipt(x, y), 96);
                 if let Some(next) = next_o {
                     if next != selected {
                         if self.sim.world.contains_edge(selected, next){
@@ -129,7 +138,7 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            self.selected = check_planets(&self.sim, ipt(x, y), 32);
+            self.selected = check_planets(&self.sim, ipt(x, y), 96);
         }
     }
 }

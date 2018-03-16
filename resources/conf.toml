@@ -1,5 +1,5 @@
 [system]
-tick_time = 100
+tick_rate = 10
 command_delay = 4
 
 [render]
