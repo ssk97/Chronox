@@ -34,10 +34,10 @@ fn to_Ipt(p: Vec<i64>) -> Ipt{
 }
 
 //returns the graph
-pub fn load_map(map: LoadingMap) -> Graph<Planet, Edge, Undirected>{
+pub fn load_map(map: LoadingMap) -> WorldGraph{
 
     let mut g = Graph::new_undirected();
-    let mut data: HashMap<&str, NodeInd> = HashMap::new();
+    let mut data: HashMap<String, NodeInd> = HashMap::new();
     for p in map.planet{
         let loc = to_Ipt(p.loc);
         let owner = Player::from_i64(p.owner.unwrap_or(Player::PASSIVE as i64)).unwrap();
@@ -57,11 +57,11 @@ pub fn load_map(map: LoadingMap) -> Graph<Planet, Edge, Undirected>{
             spawn_needed,
         };
         let node_ind = g.add_node(node);
-        data.insert(p.id.as_str(), node_ind);
+        data.insert(p.id, node_ind);
         if let Some(edges) = p.edges {
             for e in edges{
-                let other = data[e.as_str()];
-                g.add_edge(node_ind, other, Edge::new());
+                let other = data.get(&e).unwrap();
+                g.add_edge(node_ind, *other, Edge::new());
             }
         }
     }

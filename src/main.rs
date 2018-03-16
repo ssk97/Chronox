@@ -27,8 +27,6 @@ use simulation::*;
 
 mod renderer;
 use renderer::*;
-mod interface;
-use interface::*;
 
 mod map_loading;
 
@@ -121,7 +119,7 @@ impl event::EventHandler for MainState {
                              y: i32) {
         if let Some(selected) = self.selected {
             if button == MouseButton::Left {
-                let next_o = check_planets(&self.sim, ipt(x, y), 96);
+                let next_o = self.sim.check_planets(ipt(x, y), 96);
                 if let Some(next) = next_o {
                     if next != selected {
                         if self.sim.world.contains_edge(selected, next){
@@ -142,7 +140,7 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         if button == MouseButton::Left{
-            self.selected = check_planets(&self.sim, ipt(x, y), 96);
+            self.selected = self.sim.check_planets(ipt(x, y), 96);
         }
     }
 }

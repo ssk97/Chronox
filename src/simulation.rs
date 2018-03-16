@@ -78,9 +78,9 @@ pub struct ArmyGroup{
     pub player: Player
 }
 
-type worldGraph =  Graph<Planet, Edge, Undirected>;
+pub type WorldGraph =  Graph<Planet, Edge, Undirected>;
 pub struct Simulation{
-    pub world:worldGraph,
+    pub world:WorldGraph,
     timestep: u64,
 }
 
@@ -107,7 +107,7 @@ pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     sides_found
 }
 impl Simulation{
-    pub fn new(world: worldGraph) -> Simulation{
+    pub fn new(world: WorldGraph) -> Simulation{
         Simulation{world, timestep: 0}
     }
 
@@ -168,7 +168,7 @@ impl Simulation{
         for node in self.world.node_weights_mut() {
             //spawn more on owned nodes
             if node.owner != Player::PASSIVE {
-                node.spawn_progress += 1;
+                node.spawn_progress += 10;
                 if node.spawn_progress >= node.spawn_needed {
                     node.spawn_progress -= node.spawn_needed;
                     node.count[node.owner] += 1;
@@ -224,4 +224,23 @@ impl Simulation{
             }
         }
     }
+    pub fn check_planets(&self, pos: Ipt, max_dist: i32) -> Option<NodeInd>{
+        let mut dist = i32::max_value();
+        let mut best = None;
+        for node_ind in self.world.node_indices(){
+            let node = &self.world[node_ind];
+            let tmpdist = dist2(&pos, &node.loc);
+            if tmpdist < dist{
+                best = Some(node_ind);
+                dist = tmpdist;
+            }
+        }
+        if dist < max_dist*max_dist{
+            return best;
+        } else {
+            return None;
+        }
+    }
+
+
 }
