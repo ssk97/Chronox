@@ -7,8 +7,10 @@ build = "build.rs"
 [dependencies]
 ggez = "0.4"
 #contains nalgebra
-num-traits = "0.1"
-#needed for nalgebra generics
+num = "0.1"
+num-traits = "0.2"
+num-derive = "0.2"
+#needed for nalgebra generics and enum FromPrimitive
 
 #rand = "0.4"
 petgraph = "0.4"

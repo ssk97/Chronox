@@ -1,0 +1,42 @@
+[global]
+map_size = [2000, 1000]
+
+[[planet]]
+id = "startL"
+loc = [100, 500]
+owner = 1
+[[planet]]
+id = "upL"
+loc = [500, 200]
+edges = ["startL"]
+[[planet]]
+id = "downL"
+loc = [500, 800]
+edges = ["startL"]
+
+[[planet]]
+id = "upM"
+loc = [1000, 200]
+edges = ["upL"]
+[[planet]]
+id = "downM"
+loc = [1000, 800]
+edges = ["downL"]
+[[planet]]
+id = "midM"
+loc = [1000, 500]
+edges = ["upM", "downM"]
+
+[[planet]]
+id = "upR"
+loc = [1500, 200]
+edges = ["upM"]
+[[planet]]
+id = "downR"
+loc = [1500, 800]
+edges = ["downM"]
+[[planet]]
+id = "startR"
+loc = [1900, 500]
+owner = 2
+edges = ["upR", "downR"]

@@ -5,12 +5,15 @@ use rand::{thread_rng, Rng};*/
 
 #[macro_use]
 extern crate plain_enum;
+extern crate num;
+#[macro_use]
+extern crate num_derive;
 
 use std::env;
 use std::path;
 use std::io::Read;
 use std::collections::VecDeque;
-use std::io::Write;
+//use std::io::Write;
 extern crate ggez;
 use ggez::*;
 use ggez::event::*;
@@ -26,6 +29,8 @@ mod renderer;
 use renderer::*;
 mod interface;
 use interface::*;
+
+mod map_loading;
 
 extern crate toml;
 #[macro_use]
@@ -69,7 +74,13 @@ impl MainState {
         let mut buffer = Vec::new();
         conf_file.read_to_end(&mut buffer)?;
         let conf: Config = toml::from_slice(&buffer).unwrap_or_default();
-        let sim = Simulation::new();
+
+        let mut level_file = ctx.filesystem.open("/level1.toml")?;
+        let mut buffer_l = Vec::new();
+        level_file.read_to_end(&mut buffer_l)?;
+        let level: map_loading::LoadingMap = toml::from_slice(&buffer_l).unwrap();
+        let graph = map_loading::load_map(level);
+        let sim = Simulation::new(graph);
         let renderer = Renderer::new(ctx)?;
         let mut orders = VecDeque::new();
         for _ in 0..conf.system.command_delay{

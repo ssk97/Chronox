@@ -7,7 +7,7 @@ pub type NodeInd = NodeIndex<u32>;
 pub type EdgeInd = EdgeIndex<u32>;
 
 use plain_enum::*;
-plain_enum_mod!(player_enum, Player {
+plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive,), map_derive(), Player {
     PASSIVE,
     P1, P2, P3, P4,
 });
@@ -46,15 +46,14 @@ pub struct Planet {
     pub spawn_needed: u32,
 }
 impl Planet{
-    pub fn new(loc: Ipt) -> Planet{
+    pub fn new(loc: Ipt, owner: Player) -> Planet{
         let mut count = [0;MAX_SIDES];
-        count[0] = 10;
+        count[owner] = 10;
         Planet{
             loc,
             count,
             fight_progess: [0;MAX_SIDES],
-
-            owner: Player::PASSIVE,
+            owner,
             owner_strength: 64,
             max_strength: 64,
             spawn_progress: 0,
@@ -79,8 +78,9 @@ pub struct ArmyGroup{
     pub player: Player
 }
 
+type worldGraph =  Graph<Planet, Edge, Undirected>;
 pub struct Simulation{
-    pub world: Graph<Planet, Edge, Undirected>,
+    pub world:worldGraph,
     timestep: u64,
 }
 
@@ -107,17 +107,8 @@ pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     sides_found
 }
 impl Simulation{
-    pub fn new() -> Simulation{
-        let mut g = Graph::new_undirected();
-        let mut starting_planet = Planet::new(ipt(100, 100));
-        starting_planet.owner = Player::P1;
-        starting_planet.count[Player::P1] = 20;
-        let node_a = g.add_node(starting_planet);
-        let node_b = g.add_node(Planet::new(ipt(800, 200)));
-        let node_c = g.add_node(Planet::new(ipt(400, 600)));
-        g.add_edge(node_a, node_b, Edge::new());
-        g.add_edge(node_b, node_c, Edge::new());
-        Simulation{world: g, timestep: 0}
+    pub fn new(world: worldGraph) -> Simulation{
+        Simulation{world, timestep: 0}
     }
 
     pub fn handle_orders(&mut self, _conf: &GameConfig, orders: &Vec<Order>){
@@ -129,7 +120,7 @@ impl Simulation{
                     let edge_data = self.world.find_edge_undirected(data.from, data.to);
                     if let Some((edge_ind, dir)) = edge_data {
                         let (edge, node) = self.world.index_twice_mut(edge_ind, data.from);
-                        let transfer_amount = (node.count[player] * percent) / 100; // TODO: make percentage or something?
+                        let transfer_amount = (node.count[player] * percent) / 100;
                         node.count[player] -= transfer_amount;
                         let order_dir = match dir {
                             Direction::Outgoing => DIR::FORWARD,
