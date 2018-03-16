@@ -1,11 +1,20 @@
-pub extern crate ggez;
-use self::ggez::*;
-use self::ggez::graphics::*;
-use self::ggez::nalgebra as na;
-
+use ggez::*;
+use ggez::graphics::*;
+use ggez::nalgebra as na;
 extern crate num_traits as num;
-
 use std::cmp::*;
+
+pub type Ipt = na::Point2<i32>;
+pub fn pt(x: f32, y: f32) -> Point2{
+    return Point2::new(x, y);
+}
+pub fn gpt(loc: Ipt) -> Point2{
+    return Point2::new(loc.x as f32, loc.y as f32);
+}
+pub fn ipt(x: i32, y: i32) -> Ipt{
+    return Ipt::new(x, y);
+}
+
 
 //returns the distance squared, generally meant for integer format
 pub fn dist2<T: na::Scalar+num::Num>(a: &na::Point2<T>, b: &na::Point2<T>) -> T{
@@ -38,10 +47,11 @@ impl NumericFont{
     pub fn draw(&self, ctx: &mut Context, loc: Point2, number: usize) -> GameResult<()>{
         let mut stack = Vec::new();
         let mut num = number;
-        while num > 0{
+        loop {
             let digit = num%10;
             num /= 10;
             stack.push(digit);
+            if num <= 0 {break;}
         }
         let mut pos = loc;
         while let Some(digit) = stack.pop(){
@@ -55,13 +65,14 @@ impl NumericFont{
         let mut stack = Vec::new();
         let mut num = number;
         let mut total_width = 0.0;
-        while num > 0{
+        loop {
             let digit = num%10;
             num /= 10;
             let glyph = & self.glyphs[digit];
             let width = self.widths[digit];
             stack.push((width, glyph));
             total_width += width;
+            if num <= 0 {break;}
         }
         let mut pos = loc - Vector2::new(total_width/2.0, self.maxh/2.0);
         while let Some((width, digit)) = stack.pop(){
