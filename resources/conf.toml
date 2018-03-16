@@ -1,2 +1,9 @@
+[system]
+tick_time = 100
+command_delay = 4
+
+[render]
+colors = [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]
+
 [game]
 army_speed = 10

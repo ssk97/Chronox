@@ -22,6 +22,11 @@ pub fn dist2<T: na::Scalar+num::Num>(a: &na::Point2<T>, b: &na::Point2<T>) -> T{
     let y = a.y-b.y;
     (x*x)+(y*y)
 }
+pub fn lendir(len: f32, dir: f32) -> Point2
+{
+    let (y, x) = dir.sin_cos();
+    return vec2(x, y)*len;
+}
 
 pub struct NumericFont{ //Used for drawing rapidly-changing text via a pre-rendered font
     glyphs: Vec<Text>,
@@ -44,9 +49,9 @@ impl NumericFont{
         }
         Ok(NumericFont {glyphs, widths, maxw: maxw as f32, maxh: maxh as f32})
     }
-    pub fn draw(&self, ctx: &mut Context, loc: Point2, number: usize) -> GameResult<()>{
+    pub fn draw<N: Into<u64>>(&self, ctx: &mut Context, loc: Point2, number: N) -> GameResult<()>{
         let mut stack = Vec::new();
-        let mut num = number;
+        let mut num = number.into() as usize;
         loop {
             let digit = num%10;
             num /= 10;
@@ -61,9 +66,9 @@ impl NumericFont{
         }
         Ok(())
     }
-    pub fn draw_centered(&self, ctx: &mut Context, loc: Point2, number: usize) -> GameResult<()>{
+    pub fn draw_centered<N: Into<u64>>(&self, ctx: &mut Context, loc: Point2, number: N) -> GameResult<()>{
         let mut stack = Vec::new();
-        let mut num = number;
+        let mut num = number.into() as usize;
         let mut total_width = 0.0;
         loop {
             let digit = num%10;

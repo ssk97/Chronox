@@ -4,6 +4,11 @@ use simulation::*;
 use simulation::petgraph::prelude::*;
 use library::*;
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct RenderConfig{
+    pub colors: [u32;MAX_SIDES]
+}
+
 struct GlobalResources{
     font: Font,
     num_font: NumericFont,
@@ -20,6 +25,11 @@ impl GlobalResources{
     }
 }
 
+fn set_col(ctx: &mut Context, conf: &RenderConfig, player: Player) -> GameResult<()>{
+    let col = conf.colors[player];
+    set_color(ctx, Color::from_rgb_u32(col))?;
+    Ok(())
+}
 pub struct Renderer{
     resources: GlobalResources
 }
@@ -28,7 +38,7 @@ impl Renderer {
         let resources = GlobalResources::new(ctx)?;
         Ok(Renderer{resources})
     }
-    pub fn render(&self, ctx: &mut Context, sim: &Simulation) -> GameResult<()> {
+    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, sim: &Simulation) -> GameResult<()> {
         for edge_ref in sim.world.edge_references() {
             let s = &sim.world[edge_ref.source()];
             let t = &sim.world[edge_ref.target()];
@@ -44,7 +54,7 @@ impl Renderer {
                 let loc = s_loc + (t_loc - s_loc) * f_progress;
                 graphics::circle(ctx, DrawMode::Fill, loc, 16., 0.5)?;
                 set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
-                self.resources.small_num_font.draw_centered(ctx, loc, group.count as usize)?;
+                self.resources.small_num_font.draw_centered(ctx, loc, group.count)?;
                 set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             }
         }
@@ -54,7 +64,18 @@ impl Renderer {
             let node_loc = gpt(node.loc);
             graphics::circle(ctx, DrawMode::Fill, node_loc, 32., 0.5)?;
             set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
-            self.resources.num_font.draw_centered(ctx, node_loc, node.count as usize)?;
+            //TODO: handle multi-player count
+            let involved = find_sides_node(node);
+            if involved.len() == 1 {
+                let player = involved[0];
+                set_col(ctx, conf, player);
+                self.resources.num_font.draw_centered(ctx, node_loc, node.count[player])?;
+            } else if involved.len() > 1 {
+                for(player in involved){
+                    set_col(ctx, conf, player);
+                    self.resources.small_num_font.draw_centered(ctx, node_loc, node.count[player]) ?;
+                }
+            }
             set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
         Ok(())

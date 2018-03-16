@@ -1,7 +1,7 @@
 use simulation::*;
 use library::*;
 
-pub fn check_planets(sim: &Simulation, pos: Ipt, maxDist: i32) -> Option<NodeInd>{
+pub fn check_planets(sim: &Simulation, pos: Ipt, max_dist: i32) -> Option<NodeInd>{
     let mut dist = i32::max_value();
     let mut best = None;
     for node_ind in sim.world.node_indices(){
@@ -12,7 +12,7 @@ pub fn check_planets(sim: &Simulation, pos: Ipt, maxDist: i32) -> Option<NodeInd
             dist = tmpdist;
         }
     }
-    if dist < maxDist*maxDist{
+    if dist < max_dist*max_dist{
         return best;
     } else {
         return None;

@@ -1,12 +1,15 @@
-//#![allow(dead_code)]
+#![allow(dead_code)]
 /*extern crate rand;
 use rand::distributions::{IndependentSample, Range};
 use rand::{thread_rng, Rng};*/
 
+#[macro_use]
+extern crate plain_enum;
 
 use std::env;
 use std::path;
 use std::io::Read;
+use std::collections::VecDeque;
 //use std::io::Write;
 extern crate ggez;
 use ggez::*;
@@ -17,7 +20,7 @@ use library::*;
 
 mod simulation;
 use simulation::*;
-use simulation::petgraph::prelude::*;
+//use simulation::petgraph::prelude::*;
 
 mod renderer;
 use renderer::*;
@@ -28,16 +31,36 @@ extern crate toml;
 #[macro_use]
 extern crate serde_derive;
 
+
+#[derive(Serialize, Deserialize, Debug)]
+struct SystemConfig{
+    tick_time: u64, //in ms
+    command_delay: usize
+}
 #[derive(Serialize, Deserialize, Debug)]
 struct Config{
+    system: SystemConfig,
+    render: RenderConfig,
     game: GameConfig
+}
+use std::default::Default;
+impl Default for Config{
+    fn default() -> Config{
+        let system = SystemConfig{tick_time: 100, command_delay: 4};
+        let render = RenderConfig{colors: [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
+        let game = GameConfig{army_speed: 10};
+        Config{
+            system, render, game
+        }
+    }
 }
 struct MainState {
     sim: Simulation,
     selected: Option<NodeInd>,
     frame: u64,
     renderer: Renderer,
-    conf: Config
+    conf: Config,
+    orders: VecDeque<Vec<Order>>
 }
 
 impl MainState {
@@ -46,9 +69,13 @@ impl MainState {
         let mut conf_file = ctx.filesystem.open("/conf.toml")?;
         let mut buffer = Vec::new();
         conf_file.read_to_end(&mut buffer)?;
-        let conf = toml::from_slice(&buffer).unwrap();
+        let conf:Config = toml::from_slice(&buffer).unwrap_or_default();
         let renderer = Renderer::new(ctx)?;
-        let s = MainState { sim, selected: None, frame: 0, renderer, conf };
+        let mut orders = VecDeque::new();
+        for _ in 0..conf.system.command_delay{
+            orders.push_front(Vec::new());
+        }
+        let s = MainState { sim, selected: None, frame: 0, renderer, conf, orders };
         Ok(s)
     }
 
@@ -60,13 +87,15 @@ impl event::EventHandler for MainState {
         if self.frame % 120 == 0 {
             println!("{} - FPS: {}", self.frame, timer::get_fps(_ctx));
         }
+        self.orders.push_back(Vec::new());
+        self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
         self.sim.update(&self.conf.game);
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
-        self.renderer.render(ctx, &self.sim);
+        self.renderer.render(ctx, &self.conf.render, &self.sim)?;
         graphics::present(ctx);
         Ok(())
     }
@@ -82,15 +111,10 @@ impl event::EventHandler for MainState {
                 let next_o = check_planets(&self.sim, ipt(x, y), 32);
                 if let Some(next) = next_o {
                     if next != selected {
-                        if let Some((edge_ind, dir)) = self.sim.world.find_edge_undirected(selected, next){
-                            let (edge, node) = self.sim.world.index_twice_mut(edge_ind, selected);
-                            let transfer_amount = node.count; // TODO: make percentage or something?
-                            node.count -= transfer_amount;
-                            let new_follow = match dir{
-                                Direction::Outgoing => ArmyGroup { direction: DIR::FORWARD, progress: 0, count: transfer_amount },
-                                Direction::Incoming => ArmyGroup { direction: DIR::BACKWARD, progress: 0, count: transfer_amount }
-                            };
-                            edge.transfers.push(new_follow);
+                        if self.sim.world.contains_edge(selected, next){
+                            let command = TransportCommand{from: selected, to: next, percent: 50};
+                            let order = Order{player: Player::P1, command: CommandEnum::Transport(command)};
+                            self.orders.back_mut().unwrap().push(order);
                         }
                     }
                 }
