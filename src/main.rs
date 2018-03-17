@@ -13,8 +13,8 @@ use num::FromPrimitive;
 use std::env;
 use std::path;
 use std::io::Read;
-use std::collections::VecDeque;
 use std::time;
+use std::collections::VecDeque;
 //use std::io::Write;
 extern crate ggez;
 use ggez::*;
@@ -29,6 +29,8 @@ mod simulation;
 use simulation::*;
 mod renderer;
 use renderer::*;
+mod interface;
+use interface::*;
 
 extern crate toml;
 extern crate bincode;
@@ -60,17 +62,19 @@ enum MenuState{
 }
 struct MainState {
     sim: Simulation,
-    selected: Option<NodeInd>,
     renderer: Renderer,
-    conf: Config,
-    orders: VecDeque<Vec<Order>>,
-    player: Player,
+    interface: GameInterface,
     networking: Option<NetworkManager>,
+    conf: Config,
+
+    orders: OrdersType,
+    player: Player,
 
     frame: u64,
     turn: u64,
     residual_update_dt: time::Duration,
     last_instant: time::Instant,
+    last_turn: time::Instant,
     state: MenuState,
 }
 
@@ -113,20 +117,26 @@ impl MainState {
             Some(ip) => Some(NetworkManager::new(&ip, &conf.system)),
             None => None,
         };
-
+        let interface = GameInterface::new();
         let s = MainState {
-            sim, selected: None, frame: 0, turn: 0, renderer, conf, orders, player, networking,
-            residual_update_dt: time::Duration::from_secs(0),
-            last_instant: time::Instant::now(), state
+            sim, renderer, interface, networking, conf, orders, player,
+            frame: 0, turn: 0, residual_update_dt: time::Duration::from_secs(0),
+            last_instant: time::Instant::now(), last_turn: time::Instant::now(), state
         };
         Ok(s)
     }
 
     fn tick(&mut self) {
-        let now = time::Instant::now();;
+        let now = time::Instant::now();
         let time_since_last = now - self.last_instant;
         self.residual_update_dt += time_since_last;
         self.last_instant = now;
+        self.frame += 1;
+    }
+    fn turn_tick(&mut self) {
+        let now = time::Instant::now();;
+        self.turn += 1;
+        self.last_turn = now;
     }
     fn reset_time(&mut self){
         self.last_instant = time::Instant::now();;
@@ -154,7 +164,7 @@ impl MainState {
     fn dt(&self) -> f32{
         let now = time::Instant::now();
         let dt_expected = time::Duration::from_millis(self.conf.system.tick_time as u64);
-        let dt_now = now-self.last_instant;
+        let dt_now = now-self.last_turn;
         let dt = ((dt_now.subsec_nanos() as f64)/(dt_expected.subsec_nanos() as f64)) as f32;
         println!("dtL{}",dt);
         dt
@@ -171,16 +181,13 @@ impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         match self.state{
             MenuState::Playing => {
-
-                self.frame += 1;
+                self.tick();
                 if self.frame % 120 == 0 {
                     println!("{} - FPS: {}", self.frame, timer::get_fps(ctx));
                 }
-
-                self.tick();
                 self.check_networking();
                 while self.check_update() {
-                    self.turn += 1;
+                    self.turn_tick();
                     self.orders.push_back(Vec::new());
                     self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
                     self.sim.update(&self.conf.game);
@@ -206,7 +213,7 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
-        self.renderer.render(ctx, &self.conf.render, &self.conf.game, &self.sim, self.dt())?;
+        self.renderer.render(ctx, &self.conf.render, &self.conf.game, &self.sim, &self.interface, self.dt())?;
         graphics::present(ctx);
         Ok(())
     }
@@ -217,21 +224,7 @@ impl event::EventHandler for MainState {
                              button: MouseButton,
                              x: i32,
                              y: i32) {
-        if let Some(selected) = self.selected {
-            if button == MouseButton::Left {
-                let next_o = self.sim.check_planets(ipt(x, y), 96);
-                if let Some(next) = next_o {
-                    if next != selected {
-                        if self.sim.world.contains_edge(selected, next){
-                            let command = TransportCommand{from: selected, to: next, percent: 50};
-                            let order = Order{player: self.player, command: CommandEnum::Transport(command)};
-                            self.orders.back_mut().unwrap().push(order);
-                        }
-                    }
-                }
-            }
-        }
-        self.selected = None;
+        self.interface.mouse_up(button, ipt(x, y), self.player, &self.sim, &mut self.orders);
     }
 
     fn mouse_button_down_event(&mut self,
@@ -239,9 +232,7 @@ impl event::EventHandler for MainState {
                                button: MouseButton,
                                x: i32,
                                y: i32) {
-        if button == MouseButton::Left{
-            self.selected = self.sim.check_planets(ipt(x, y), 96);
-        }
+        self.interface.mouse_down(button, ipt(x, y), self.player, &self.sim, &mut self.orders);
     }
 }
 pub fn main() {
@@ -251,7 +242,7 @@ pub fn main() {
             .title("Chronox!")
         )
         .window_mode(conf::WindowMode::default()
-            .dimensions(1920, 1080)
+            .dimensions(1200, 700)
         );
     let ctx = &mut cb.build().unwrap();
 

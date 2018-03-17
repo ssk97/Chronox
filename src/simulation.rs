@@ -3,6 +3,7 @@ use library::*;
 
 pub extern crate petgraph;
 use self::petgraph::prelude::*;
+use std::collections::VecDeque;
 pub type NodeInd = NodeIndex<u32>;
 pub type EdgeInd = EdgeIndex<u32>;
 
@@ -99,6 +100,8 @@ pub struct Order{
     pub player: Player,
     pub command: CommandEnum
 }
+
+pub type OrdersType = VecDeque<Vec<Order>>;
 
 pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     let mut sides_found = Vec::new();

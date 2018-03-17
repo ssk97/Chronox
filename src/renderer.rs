@@ -2,6 +2,7 @@ use ggez::*;
 use ggez::graphics::*;
 use simulation::*;
 use simulation::petgraph::prelude::*;
+use interface::*;
 use library::*;
 use std::f32::consts::PI;
 
@@ -39,7 +40,7 @@ impl Renderer {
         let resources = GlobalResources::new(ctx)?;
         Ok(Renderer{resources})
     }
-    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, dt: f32) -> GameResult<()> {
+    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, interface: &GameInterface, dt: f32) -> GameResult<()> {
         //Draw edges and army groups moving on them
         for edge_ref in sim.world.edge_references() {
             let s = &sim.world[edge_ref.source()];
@@ -86,6 +87,19 @@ impl Renderer {
                     angle += angle_increment;
                 }
             }
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
+        }
+
+        //draw selection
+        if let Some(node_ind) = interface.selected{
+            let node = &sim.world[node_ind];
+            let node_loc = gpt(node.loc);
+            let radius = (node.max_strength-5) as f32;
+            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
+            graphics::circle(ctx, DrawMode::Line(2.0), node_loc, radius, 0.25)?;
+            let mouse_pos = mouse::get_position(ctx)?;
+            let offset = (mouse_pos-node_loc).normalize()*radius;
+            graphics::line(ctx, &[node_loc+offset, mouse_pos], 2.)?;
             set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
         Ok(())
