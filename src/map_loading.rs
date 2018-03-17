@@ -28,6 +28,7 @@ pub struct LoadingMap{
 fn to_vec(p: &Ipt) -> Vec<i64>{
     vec![p.x as i64, p.y as i64]
 }
+#[allow(non_snake_case)]
 fn to_Ipt(p: Vec<i64>) -> Ipt{
     debug_assert!(p.len() == 2);
     ipt(p[0] as i32, p[1] as i32)

@@ -8,48 +8,45 @@ extern crate plain_enum;
 extern crate num;
 #[macro_use]
 extern crate num_derive;
+use num::FromPrimitive;
 
 use std::env;
 use std::path;
 use std::io::Read;
 use std::collections::VecDeque;
+use std::time;
 //use std::io::Write;
 extern crate ggez;
 use ggez::*;
 use ggez::event::*;
 
+mod map_loading;
+mod networking;
+use networking::*;
 mod library;
 use library::*;
-
 mod simulation;
 use simulation::*;
-//use simulation::petgraph::prelude::*;
-
 mod renderer;
 use renderer::*;
 
-mod map_loading;
-
 extern crate toml;
+extern crate bincode;
 #[macro_use]
 extern crate serde_derive;
 
 
-#[derive(Serialize, Deserialize, Debug)]
-struct SystemConfig{
-    tick_rate: u32,
-    command_delay: usize
-}
+
 #[derive(Serialize, Deserialize, Debug)]
 struct Config{
     system: SystemConfig,
     render: RenderConfig,
-    game: GameConfig
+    game: GameConfig,
 }
 use std::default::Default;
 impl Default for Config{
     fn default() -> Config{
-        let system = SystemConfig{tick_rate: 10, command_delay: 4};
+        let system = SystemConfig{tick_time: 100, command_delay: 4, port_from: Some(40004), port_to: Some(40004)};
         let render = RenderConfig{colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
         let game = GameConfig{army_speed: 100};
         Config{
@@ -57,13 +54,24 @@ impl Default for Config{
         }
     }
 }
+enum MenuState{
+    WaitingForConnection,
+    Playing,
+}
 struct MainState {
     sim: Simulation,
     selected: Option<NodeInd>,
-    frame: u64,
     renderer: Renderer,
     conf: Config,
-    orders: VecDeque<Vec<Order>>
+    orders: VecDeque<Vec<Order>>,
+    player: Player,
+    networking: Option<NetworkManager>,
+
+    frame: u64,
+    turn: u64,
+    residual_update_dt: time::Duration,
+    last_instant: time::Instant,
+    state: MenuState,
 }
 
 impl MainState {
@@ -84,29 +92,121 @@ impl MainState {
         for _ in 0..conf.system.command_delay{
             orders.push_front(Vec::new());
         }
-        let s = MainState { sim, selected: None, frame: 0, renderer, conf, orders };
+
+
+        let args: Vec<String> = env::args().collect();
+        println!("args: {:?}", args);
+        let player;
+        if let Some(player_str) = args.get(1) {
+            let player_num = player_str.parse::<i64>().expect("Player ID (1st arg) not a number");
+            player = Player::from_i64(player_num).expect("Player ID (1st arg) not 1-4");
+            //Have fun with player 0!
+        } else {
+            player = Player::P1;
+        }
+        let ipaddr = args.get(2).cloned();
+        let state = match ipaddr.is_some(){
+            true => MenuState::WaitingForConnection,
+            false => MenuState::Playing,
+        };
+        let networking = match ipaddr{
+            Some(ip) => Some(NetworkManager::new(&ip, &conf.system)),
+            None => None,
+        };
+
+        let s = MainState {
+            sim, selected: None, frame: 0, turn: 0, renderer, conf, orders, player, networking,
+            residual_update_dt: time::Duration::from_secs(0),
+            last_instant: time::Instant::now(), state
+        };
         Ok(s)
     }
 
+    fn tick(&mut self) {
+        let now = time::Instant::now();;
+        let time_since_last = now - self.last_instant;
+        self.residual_update_dt += time_since_last;
+        self.last_instant = now;
+    }
+    fn reset_time(&mut self){
+        self.last_instant = time::Instant::now();;
+        self.residual_update_dt = time::Duration::from_secs(0);
+
+    }
+    fn check_update(&mut self) -> bool {
+        let dt = time::Duration::from_millis(self.conf.system.tick_time as u64);
+        if self.residual_update_dt > dt {
+            self.residual_update_dt -= dt;
+            if let Some(n) = self.networking.as_mut() {
+                if n.can_advance(){
+                    n.advance();
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    }
+    fn dt(&self) -> f32{
+        let now = time::Instant::now();
+        let dt_expected = time::Duration::from_millis(self.conf.system.tick_time as u64);
+        let dt_now = now-self.last_instant;
+        let dt = ((dt_now.subsec_nanos() as f64)/(dt_expected.subsec_nanos() as f64)) as f32;
+        println!("dtL{}",dt);
+        dt
+    }
+    fn check_networking(&mut self) {
+        if let Some(n) = self.networking.as_mut() {
+            n.receive_commands(&mut self.orders, self.turn, &self.conf.system);
+        }
+    }
 }
+
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        self.frame += 1;
-        if self.frame % 120 == 0 {
-            println!("{} - FPS: {}", self.frame, timer::get_fps(ctx));
+        match self.state{
+            MenuState::Playing => {
+
+                self.frame += 1;
+                if self.frame % 120 == 0 {
+                    println!("{} - FPS: {}", self.frame, timer::get_fps(ctx));
+                }
+
+                self.tick();
+                self.check_networking();
+                while self.check_update() {
+                    self.turn += 1;
+                    self.orders.push_back(Vec::new());
+                    self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
+                    self.sim.update(&self.conf.game);
+                    if let Some(n) = self.networking.as_mut() {
+                        n.send_commands(&mut self.orders, self.turn);
+                    }
+                }
+            }
+            MenuState::WaitingForConnection => {
+                let connected = {
+                    let net = &mut self.networking.as_mut().unwrap();
+                    net.attempt_connect(self.player)
+                };
+                if connected {
+                    self.state = MenuState::Playing;
+                    self.reset_time();
+                }
+            }
         }
-        while timer::check_update_time(ctx, self.conf.system.tick_rate) {
-            self.orders.push_back(Vec::new());
-            self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
-            self.sim.update(&self.conf.game);
-        }
+
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
-        self.renderer.render(ctx, &self.conf.render, &self.sim)?;
+        self.renderer.render(ctx, &self.conf.render, &self.conf.game, &self.sim, self.dt())?;
         graphics::present(ctx);
         Ok(())
     }
@@ -124,7 +224,7 @@ impl event::EventHandler for MainState {
                     if next != selected {
                         if self.sim.world.contains_edge(selected, next){
                             let command = TransportCommand{from: selected, to: next, percent: 50};
-                            let order = Order{player: Player::P1, command: CommandEnum::Transport(command)};
+                            let order = Order{player: self.player, command: CommandEnum::Transport(command)};
                             self.orders.back_mut().unwrap().push(order);
                         }
                     }
@@ -160,6 +260,7 @@ pub fn main() {
         path.push("resources");
         ctx.filesystem.mount(&path, true);
     }
+
     let state = &mut MainState::new(ctx).unwrap();
     event::run(ctx, state).unwrap();
 }

@@ -1,6 +1,8 @@
 [system]
-tick_rate = 10
+tick_time = 100
 command_delay = 4
+port_from= 40004
+port_to= 40004
 
 [render]
 #hex colors [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]

@@ -39,7 +39,7 @@ impl Renderer {
         let resources = GlobalResources::new(ctx)?;
         Ok(Renderer{resources})
     }
-    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, sim: &Simulation) -> GameResult<()> {
+    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, dt: f32) -> GameResult<()> {
         //Draw edges and army groups moving on them
         for edge_ref in sim.world.edge_references() {
             let s = &sim.world[edge_ref.source()];
@@ -49,11 +49,12 @@ impl Renderer {
             graphics::line(ctx, &[s_loc, t_loc], 2.)?;
             let edge = edge_ref.weight();
             for group in &edge.transfers {
-                let f_progress = match group.direction {
-                    DIR::FORWARD => (group.progress as f32) / (edge.length as f32),
-                    DIR::BACKWARD => 1.0 - ((group.progress as f32) / (edge.length as f32))
+                let future_progress = ((group.progress as f32)+((game_conf.army_speed as f32)*dt))/(edge.length as f32);
+                let vis_progress = match group.direction {
+                    DIR::FORWARD => future_progress,
+                    DIR::BACKWARD => 1.0 - future_progress
                 };
-                let loc = s_loc + (t_loc - s_loc) * f_progress;
+                let loc = s_loc + (t_loc - s_loc) * vis_progress;
                 graphics::circle(ctx, DrawMode::Fill, loc, 16., 0.5)?;
                 set_col(ctx, conf, group.player)?;
                 self.resources.small_num_font.draw_centered(ctx, loc, group.count)?;

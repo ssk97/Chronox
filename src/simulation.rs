@@ -7,7 +7,7 @@ pub type NodeInd = NodeIndex<u32>;
 pub type EdgeInd = EdgeIndex<u32>;
 
 use plain_enum::*;
-plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive,), map_derive(), Player {
+plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deserialize,), map_derive(), Player {
     PASSIVE,
     P1, P2, P3, P4,
 });
@@ -81,17 +81,20 @@ pub struct ArmyGroup{
 pub type WorldGraph =  Graph<Planet, Edge, Undirected>;
 pub struct Simulation{
     pub world:WorldGraph,
-    timestep: u64,
+    pub timestep: u64,
 }
 
+#[derive(Serialize, Deserialize, Debug,  PartialEq)]
 pub struct TransportCommand{
     pub from: NodeInd,
     pub to: NodeInd,
     pub percent: u8
 }
+#[derive(Serialize, Deserialize, Debug,  PartialEq)]
 pub enum CommandEnum{
     Transport(TransportCommand)
 }
+#[derive(Serialize, Deserialize, Debug,  PartialEq)]
 pub struct Order{
     pub player: Player,
     pub command: CommandEnum
@@ -121,13 +124,15 @@ impl Simulation{
                     if let Some((edge_ind, dir)) = edge_data {
                         let (edge, node) = self.world.index_twice_mut(edge_ind, data.from);
                         let transfer_amount = (node.count[player] * percent) / 100;
-                        node.count[player] -= transfer_amount;
-                        let order_dir = match dir {
-                            Direction::Outgoing => DIR::FORWARD,
-                            Direction::Incoming => DIR::BACKWARD
-                        };
-                        let new_follow = ArmyGroup { direction: order_dir, progress: 0, count: transfer_amount, player };
-                        edge.transfers.push(new_follow);
+                        if transfer_amount > 0 {
+                            node.count[player] -= transfer_amount;
+                            let order_dir = match dir {
+                                Direction::Outgoing => DIR::FORWARD,
+                                Direction::Incoming => DIR::BACKWARD
+                            };
+                            let new_follow = ArmyGroup { direction: order_dir, progress: 0, count: transfer_amount, player };
+                            edge.transfers.push(new_follow);
+                        }
                     } else {
                         panic!("Edge no longer exists");
                     }
@@ -141,6 +146,7 @@ impl Simulation{
 
     pub fn update(&mut self, conf: &GameConfig) {
         //move armies around, if at end send them to that planet
+        self.timestep += 1;
         for edge_ind in self.world.edge_indices() {
             let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
             let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
