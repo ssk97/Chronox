@@ -41,15 +41,14 @@ impl Renderer {
     }
     pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, interface: &GameInterface, dt: f32) -> GameResult<()> {
         //transform from scrolling
-        let scroll_translate = DrawParam{dest: -interface.center_loc, .. Default::default()};
-        push_transform(ctx, Some(scroll_translate.into_matrix()));
-        apply_transformations(ctx)?;
+        let screen = |loc| {(loc-interface.center_loc)};
+
         //Draw edges and army groups moving on them
         for edge_ref in sim.world.edge_references() {
             let s = &sim.world[edge_ref.source()];
             let t = &sim.world[edge_ref.target()];
-            let s_loc = gpt(s.loc);
-            let t_loc = gpt(t.loc);
+            let s_loc = screen(gpt(s.loc));
+            let t_loc = screen(gpt(t.loc));
             line(ctx, &[s_loc, t_loc], 2.)?;
             let edge = edge_ref.weight();
             for group in &edge.transfers {
@@ -71,7 +70,7 @@ impl Renderer {
         //Draw planets and any armies on them
         for node_ind in sim.world.node_indices() {
             let node = &sim.world[node_ind];
-            let node_loc = gpt(node.loc);
+            let node_loc = screen(gpt(node.loc));
 
             set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.25)?;
@@ -89,7 +88,7 @@ impl Renderer {
                 let mut angle = PI/2.0;
                 for player in involved{
                     set_col(ctx, conf, player)?;
-                    let loc = node_loc+lendir(16.0, angle);
+                    let loc = screen(node_loc+lendir(16.0, angle));
                     self.resources.num_font.draw_centered(ctx, loc, node.count[player]) ?;
                     angle += angle_increment;
                 }
@@ -99,7 +98,7 @@ impl Renderer {
         //draw selection
         if let Some(node_ind) = interface.selected{
             let node = &sim.world[node_ind];
-            let node_loc = gpt(node.loc);
+            let node_loc = screen(gpt(node.loc));
             let radius = (node.max_strength-5) as f32;
             let mouse_pos = mouse::get_position(ctx)?;
             let offset = (mouse_pos-node_loc).normalize()*radius;
@@ -108,11 +107,8 @@ impl Renderer {
             circle(ctx, DrawMode::Line(2.0), node_loc, radius, 0.25)?;
             line(ctx, &[node_loc+offset, mouse_pos], 2.)?;
         }
-        //End transformation before drawing UI
-        pop_transform(ctx);
-        apply_transformations(ctx)?;
-        circle(ctx,DrawMode::Line(0.0),pt(0.0,0.0),0.0,0.0)?;
 
+        //draw UI
         {
             let (width_u, height_u) = get_size(ctx);
             let width = width_u as f32;

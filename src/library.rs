@@ -1,7 +1,7 @@
 use ggez::*;
 use ggez::graphics::*;
-pub use ggez::graphics::Point2;
-use ggez::nalgebra as na;
+pub use ggez::graphics::{Point2, Vector2};
+pub use ggez::nalgebra as na;
 use std::cmp::*;
 use num::Num;
 

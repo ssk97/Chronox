@@ -26,13 +26,13 @@ pub struct InterfaceConfig{
 }
 pub struct GameInterface{
     pub selected: Option<NodeInd>,
-    pub center_loc: Point2,
+    pub center_loc: Vector2,
     keyboard: KeyboardStates,
 }
 
 impl GameInterface {
     pub fn new() -> GameInterface {
-        GameInterface { selected: None, center_loc: pt(0., 0.), keyboard: KeyboardStates::new(false) }
+        GameInterface { selected: None, center_loc: Vector2::new(0., 0.), keyboard: KeyboardStates::new(false) }
     }
 
     pub fn update(&mut self, conf: &InterfaceConfig) {
@@ -50,10 +50,11 @@ impl GameInterface {
         }
     }
     pub fn mouse_up(&mut self, button: MouseButton, pt: Ipt, player: Player, sim: &Simulation, orders: &mut OrdersType) {
+        let world_pt = pt+na::Vector2::new(self.center_loc.x.round() as i32,self.center_loc.y.round() as i32);
         if let Some(selected) = self.selected {
             match button {
                 MouseButton::Left => {
-                    let next_o = sim.check_planets(pt, 96);
+                    let next_o = sim.check_planets(world_pt, 96);
                     if let Some(next) = next_o {
                         if next != selected {
                             if sim.world.contains_edge(selected, next) {
@@ -65,7 +66,7 @@ impl GameInterface {
                     }
                 }
                 MouseButton::Right => {
-                    let next_o = sim.check_planets(pt, 96);
+                    let next_o = sim.check_planets(world_pt, 96);
                     let mut command = SendAllCommand { from: selected, to: None };
                     if let Some(next) = next_o {
                         if next != selected {
@@ -83,8 +84,9 @@ impl GameInterface {
         self.selected = None;
     }
     pub fn mouse_down(&mut self, button: MouseButton, pt: Ipt, _player: Player, sim: &Simulation, _orders: &mut OrdersType) {
+        let world_pt = pt+na::Vector2::new(self.center_loc.x.round() as i32,self.center_loc.y.round() as i32);
         if button == MouseButton::Left || button == MouseButton::Right {
-            self.selected = sim.check_planets(pt, 96);
+            self.selected = sim.check_planets(world_pt, 96);
         }
     }
 
