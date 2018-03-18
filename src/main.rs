@@ -49,6 +49,7 @@ struct Config{
     system: SystemConfig,
     render: RenderConfig,
     game: GameConfig,
+    interface: InterfaceConfig,
 }
 use std::default::Default;
 impl Default for Config{
@@ -56,8 +57,9 @@ impl Default for Config{
         let system = SystemConfig{tick_time: 100, command_delay: 4, port_from: Some(40004), port_to: Some(40004)};
         let render = RenderConfig{colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
         let game = GameConfig{army_speed: 100};
+        let interface = InterfaceConfig{scroll_speed: 2.0};
         Config{
-            system, render, game
+            system, render, game, interface,
         }
     }
 }
@@ -88,7 +90,11 @@ impl MainState {
         let mut conf_file = ctx.filesystem.open("/conf.toml")?;
         let mut buffer = Vec::new();
         conf_file.read_to_end(&mut buffer)?;
-        let conf: Config = toml::from_slice(&buffer).unwrap_or_default();
+        let conf_data = toml::from_slice(&buffer);
+        if conf_data.is_err(){
+            println!("Config file failed to load, loading default.");
+        }
+        let conf: Config = conf_data.unwrap_or_default();
 
         let mut level_file = ctx.filesystem.open("/level1.toml")?;
         let mut buffer_l = Vec::new();
@@ -191,6 +197,7 @@ impl event::EventHandler for MainState {
         match self.state{
             MenuState::Playing => {
                 self.tick();
+                self.interface.update(&self.conf.interface);
                 if self.frame % 120 == 0 {
                     println!("{} - FPS: {}", self.frame, timer::get_fps(ctx));
                 }
@@ -239,6 +246,18 @@ impl event::EventHandler for MainState {
                                x: i32,
                                y: i32) {
         self.interface.mouse_down(button, ipt(x, y), self.player, &self.sim, &mut self.orders);
+    }
+
+    //event::Mod to fix unresolved reference failure in IDE
+    fn key_down_event(&mut self, _ctx: &mut Context, keycode: Keycode, _keymod: event::Mod, _repeat: bool) {
+        if !_repeat{
+            self.interface.key_down(keycode);
+        }
+    }
+    fn key_up_event(&mut self, _ctx: &mut Context, keycode: Keycode, _keymod: event::Mod, _repeat: bool) {
+        if !_repeat {
+            self.interface.key_up(keycode);
+        }
     }
 }
 pub fn main() {

@@ -41,7 +41,8 @@ impl Renderer {
     }
     pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, interface: &GameInterface, dt: f32) -> GameResult<()> {
         //transform from scrolling
-        push_transform(ctx, Some(DrawParam{.. Default::default()}.into_matrix()));
+        let scroll_translate = DrawParam{dest: -interface.center_loc, .. Default::default()};
+        push_transform(ctx, Some(scroll_translate.into_matrix()));
         apply_transformations(ctx)?;
         //Draw edges and army groups moving on them
         for edge_ref in sim.world.edge_references() {
@@ -49,7 +50,7 @@ impl Renderer {
             let t = &sim.world[edge_ref.target()];
             let s_loc = gpt(s.loc);
             let t_loc = gpt(t.loc);
-            graphics::line(ctx, &[s_loc, t_loc], 2.)?;
+            line(ctx, &[s_loc, t_loc], 2.)?;
             let edge = edge_ref.weight();
             for group in &edge.transfers {
                 let future_progress = ((group.progress as f32)+((game_conf.army_speed as f32)*dt))/(edge.length as f32);
@@ -59,10 +60,11 @@ impl Renderer {
                 };
                 let loc = s_loc + (t_loc - s_loc) * vis_progress;
                 let radius = 8.+(group.count  as f32).log2();
-                graphics::circle(ctx, DrawMode::Fill, loc, radius, 0.25)?;
+
+                set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
+                circle(ctx, DrawMode::Fill, loc, radius, 0.25)?;
                 set_col(ctx, conf, group.player)?;
                 self.resources.small_num_font.draw_centered(ctx, loc, group.count)?;
-                set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             }
         }
 
@@ -70,9 +72,12 @@ impl Renderer {
         for node_ind in sim.world.node_indices() {
             let node = &sim.world[node_ind];
             let node_loc = gpt(node.loc);
-            graphics::circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.25)?;
+
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
+            circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.25)?;
             set_col(ctx, conf, node.owner)?;
-            graphics::circle(ctx, DrawMode::Line(5.0), node_loc, node.owner_strength as f32, 0.25)?;
+            circle(ctx, DrawMode::Line(5.0), node_loc, node.owner_strength as f32, 0.25)?;
+
             let involved = find_sides_node(node);
             if involved.len() == 1 {
                 let player = involved[0];
@@ -89,7 +94,6 @@ impl Renderer {
                     angle += angle_increment;
                 }
             }
-            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
 
         //draw selection
@@ -97,16 +101,17 @@ impl Renderer {
             let node = &sim.world[node_ind];
             let node_loc = gpt(node.loc);
             let radius = (node.max_strength-5) as f32;
-            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
-            graphics::circle(ctx, DrawMode::Line(2.0), node_loc, radius, 0.25)?;
             let mouse_pos = mouse::get_position(ctx)?;
             let offset = (mouse_pos-node_loc).normalize()*radius;
-            graphics::line(ctx, &[node_loc+offset, mouse_pos], 2.)?;
-            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
+
+            set_color(ctx, Color::from_rgba(0, 0, 0, 255))?;
+            circle(ctx, DrawMode::Line(2.0), node_loc, radius, 0.25)?;
+            line(ctx, &[node_loc+offset, mouse_pos], 2.)?;
         }
         //End transformation before drawing UI
         pop_transform(ctx);
         apply_transformations(ctx)?;
+        circle(ctx,DrawMode::Line(0.0),pt(0.0,0.0),0.0,0.0)?;
 
         {
             let (width_u, height_u) = get_size(ctx);
@@ -115,9 +120,9 @@ impl Renderer {
 
             let upper_edge = height*0.9;
             set_color(ctx, Color::from_rgba(200, 200, 200, 255))?;
-            graphics::rectangle(ctx, DrawMode::Fill, Rect::new(0.,upper_edge,width,upper_edge))?;
+            rectangle(ctx, DrawMode::Fill, Rect::new(0.,upper_edge,width,height-upper_edge))?;
             set_color(ctx, Color::from_rgba(255, 255, 255, 128))?;
-            graphics::line(ctx, &[pt(0.,upper_edge), pt(width,upper_edge)], 2.)?;
+            line(ctx, &[pt(0.,upper_edge), pt(width,upper_edge)], 2.)?;
         }
 
         Ok(())

@@ -10,3 +10,6 @@ colors = [8421504, 16711680, 65280, 255, 12632064]
 
 [game]
 army_speed = 100
+
+[interface]
+scroll_speed = 2

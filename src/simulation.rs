@@ -11,7 +11,6 @@ plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deser
     PASSIVE,
     P1, P2, P3, P4,
 });
-pub const MAX_SIDES:usize = Player::SIZE;
 
 pub type PlayerArr<T> = EnumMap<Player, T>;
 
