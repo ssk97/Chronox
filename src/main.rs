@@ -143,6 +143,16 @@ impl MainState {
         self.residual_update_dt = time::Duration::from_secs(0);
 
     }
+    fn check_networking(&mut self) {
+        if let Some(n) = self.networking.as_mut() {
+            n.receive_commands(&mut self.orders, self.turn, &self.conf.system);
+        }
+    }
+    fn send_commands(&mut self){
+        if let Some(n) = self.networking.as_mut() {
+            n.send_commands(&mut self.orders, self.turn);
+        }
+    }
     fn check_update(&mut self) -> bool {
         let dt = time::Duration::from_millis(self.conf.system.tick_time as u64);
         if self.residual_update_dt > dt {
@@ -166,13 +176,7 @@ impl MainState {
         let dt_expected = time::Duration::from_millis(self.conf.system.tick_time as u64);
         let dt_now = now-self.last_turn;
         let dt = ((dt_now.subsec_nanos() as f64)/(dt_expected.subsec_nanos() as f64)) as f32;
-        println!("dtL{}",dt);
         dt
-    }
-    fn check_networking(&mut self) {
-        if let Some(n) = self.networking.as_mut() {
-            n.receive_commands(&mut self.orders, self.turn, &self.conf.system);
-        }
     }
 }
 
@@ -191,9 +195,7 @@ impl event::EventHandler for MainState {
                     self.orders.push_back(Vec::new());
                     self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
                     self.sim.update(&self.conf.game);
-                    if let Some(n) = self.networking.as_mut() {
-                        n.send_commands(&mut self.orders, self.turn);
-                    }
+                    self.send_commands();
                 }
             }
             MenuState::WaitingForConnection => {

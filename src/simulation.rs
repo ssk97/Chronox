@@ -12,7 +12,7 @@ plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deser
     PASSIVE,
     P1, P2, P3, P4,
 });
-pub const MAX_SIDES:usize = 5;
+pub const MAX_SIDES:usize = Player::SIZE;
 
 use std::ops;
 
