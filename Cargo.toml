@@ -19,7 +19,8 @@ serde_derive = "1.0"
 toml = "0.4"
 bincode = "1.0"
 
-plain_enum = "0.4.0"
+#plain_enum = "0.4.0"
+#Using a custom variant
 
 [dependencies.petgraph]
 version = "0.4"

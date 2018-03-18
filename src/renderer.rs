@@ -1,7 +1,6 @@
 use ggez::*;
 use ggez::graphics::*;
 use simulation::*;
-use simulation::petgraph::prelude::*;
 use interface::*;
 use library::*;
 use std::f32::consts::PI;
@@ -41,6 +40,9 @@ impl Renderer {
         Ok(Renderer{resources})
     }
     pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, interface: &GameInterface, dt: f32) -> GameResult<()> {
+        //transform from scrolling
+        push_transform(ctx, Some(DrawParam{.. Default::default()}.into_matrix()));
+        apply_transformations(ctx)?;
         //Draw edges and army groups moving on them
         for edge_ref in sim.world.edge_references() {
             let s = &sim.world[edge_ref.source()];
@@ -56,7 +58,8 @@ impl Renderer {
                     DIR::BACKWARD => 1.0 - future_progress
                 };
                 let loc = s_loc + (t_loc - s_loc) * vis_progress;
-                graphics::circle(ctx, DrawMode::Fill, loc, 16., 0.5)?;
+                let radius = 8.+(group.count  as f32).log2();
+                graphics::circle(ctx, DrawMode::Fill, loc, radius, 0.25)?;
                 set_col(ctx, conf, group.player)?;
                 self.resources.small_num_font.draw_centered(ctx, loc, group.count)?;
                 set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
@@ -70,7 +73,6 @@ impl Renderer {
             graphics::circle(ctx, DrawMode::Fill, node_loc, node.max_strength as f32, 0.25)?;
             set_col(ctx, conf, node.owner)?;
             graphics::circle(ctx, DrawMode::Line(5.0), node_loc, node.owner_strength as f32, 0.25)?;
-            //TODO: handle multi-player count
             let involved = find_sides_node(node);
             if involved.len() == 1 {
                 let player = involved[0];
@@ -102,6 +104,22 @@ impl Renderer {
             graphics::line(ctx, &[node_loc+offset, mouse_pos], 2.)?;
             set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
         }
+        //End transformation before drawing UI
+        pop_transform(ctx);
+        apply_transformations(ctx)?;
+
+        {
+            let (width_u, height_u) = get_size(ctx);
+            let width = width_u as f32;
+            let height = height_u as f32;
+
+            let upper_edge = height*0.9;
+            set_color(ctx, Color::from_rgba(200, 200, 200, 255))?;
+            graphics::rectangle(ctx, DrawMode::Fill, Rect::new(0.,upper_edge,width,upper_edge))?;
+            set_color(ctx, Color::from_rgba(255, 255, 255, 128))?;
+            graphics::line(ctx, &[pt(0.,upper_edge), pt(width,upper_edge)], 2.)?;
+        }
+
         Ok(())
     }
 }

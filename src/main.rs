@@ -3,8 +3,10 @@
 use rand::distributions::{IndependentSample, Range};
 use rand::{thread_rng, Rng};*/
 
+//This has been replaced with a local copy to add
 #[macro_use]
-extern crate plain_enum;
+mod plain_enum;
+//extern crate plain_enum;
 extern crate num;
 #[macro_use]
 extern crate num_derive;
@@ -20,7 +22,10 @@ extern crate ggez;
 use ggez::*;
 use ggez::event::*;
 
+extern crate petgraph;
+
 mod map_loading;
+mod orders;
 mod networking;
 use networking::*;
 mod library;

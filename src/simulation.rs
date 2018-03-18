@@ -1,42 +1,19 @@
 use library::*;
 //use ggez::nalgebra as na;
 
-pub extern crate petgraph;
-use self::petgraph::prelude::*;
-use std::collections::VecDeque;
+pub use orders::*;
+pub use petgraph::prelude::*;
 pub type NodeInd = NodeIndex<u32>;
 pub type EdgeInd = EdgeIndex<u32>;
 
 use plain_enum::*;
-plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deserialize,), map_derive(), Player {
+plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deserialize,), map_derive(Serialize, Deserialize, Copy, ), Player {
     PASSIVE,
     P1, P2, P3, P4,
 });
 pub const MAX_SIDES:usize = Player::SIZE;
 
-use std::ops;
-#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
-pub struct PlayerArr<T>([T;MAX_SIDES]);
-impl <T> ops::Index<Player> for PlayerArr<T>{
-    type Output = T;
-    fn index(&self, p: Player) -> &T{
-        let val = p as usize;
-        let &PlayerArr(ref x) = self;
-        &x[val]
-    }
-}
-impl <T> ops::IndexMut<Player> for PlayerArr<T>{
-    fn index_mut(&mut self, p: Player) -> &mut T{
-        let val = p as usize;
-        let &mut PlayerArr(ref mut x) = self;
-        &mut x[val]
-    }
-}
-impl<T: Copy> PlayerArr<T>{
-    pub fn new(val: T) -> PlayerArr<T>{
-        PlayerArr([val;MAX_SIDES])
-    }
-}
+pub type PlayerArr<T> = EnumMap<Player, T>;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct GameConfig{
@@ -137,7 +114,7 @@ pub struct ArmyGroup{
     pub count: u32,
     pub player: Player
 }
-#[derive(Clone)]
+
 pub struct HyperLane{
     pub length: i32,
     pub transfers: Vec<ArmyGroup>
@@ -157,23 +134,6 @@ pub struct Simulation{
     pub timestep: u64,
 }
 
-#[derive(Serialize, Deserialize, Debug,  PartialEq)]
-pub struct TransportCommand{
-    pub from: NodeInd,
-    pub to: NodeInd,
-    pub percent: u8
-}
-#[derive(Serialize, Deserialize, Debug,  PartialEq)]
-pub enum CommandEnum{
-    Transport(TransportCommand)
-}
-#[derive(Serialize, Deserialize, Debug,  PartialEq)]
-pub struct Order{
-    pub player: Player,
-    pub command: CommandEnum
-}
-
-pub type OrdersType = VecDeque<Vec<Order>>;
 
 pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     let mut sides_found = Vec::new();
@@ -184,6 +144,26 @@ pub fn find_sides_node(node: &Planet) -> Vec<Player>{
     }
     sides_found
 }
+
+fn send_out(world: &mut WorldGraph, from: NodeInd, to: NodeInd, player:Player, percent: u8){
+    let edge_data = world.find_edge_undirected(from, to);
+    if let Some((edge_ind, dir)) = edge_data {
+        let (edge, node) = world.index_twice_mut(edge_ind, from);
+        let transfer_amount = (node.count[player] * (percent as u32)) / 100;
+        if transfer_amount > 0 {
+            node.count[player] -= transfer_amount;
+            let order_dir = match dir {
+                Direction::Outgoing => DIR::FORWARD,
+                Direction::Incoming => DIR::BACKWARD
+            };
+            let new_follow = ArmyGroup { direction: order_dir, progress: 0, count: transfer_amount, player };
+            edge.transfers.push(new_follow);
+        }
+    } else {
+        panic!("Edge no longer exists");
+    }
+}
+
 impl Simulation{
     pub fn new(world: WorldGraph) -> Simulation{
         Simulation{world, timestep: 0}
@@ -198,9 +178,9 @@ impl Simulation{
         let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
         let mut new_world: WorldGraph = self.world.map(
             |_node_ind, node| {
-                let mut x = node.clone();
-                x.advance();
-                x
+                let mut new_node = node.clone();
+                new_node.advance();
+                new_node
             },
             |edge_ind, edge| {
                 //move armies around, if at end send them to that planet
@@ -230,28 +210,26 @@ impl Simulation{
             let node = &mut new_world[removal.0];
             node.count[removal.1] += removal.2;
         }
+        //every half-second (5 timesteps) check for "send all" commands
+        if self.timestep%5 == 0 {
+            for node_ind in new_world.node_indices() {
+                for p in Player::values() {
+                    if let Some(target) = new_world[node_ind].send_all[p] {
+                        send_out(&mut new_world, node_ind, target, p, 100);
+                    }
+                }
+            }
+        }
 
         for order in orders {
             let player = order.player;
             match order.command {
                 CommandEnum::Transport(ref data) => {
-                    let percent = data.percent as u32;
-                    let edge_data = new_world.find_edge_undirected(data.from, data.to);
-                    if let Some((edge_ind, dir)) = edge_data {
-                        let (edge, node) = new_world.index_twice_mut(edge_ind, data.from);
-                        let transfer_amount = (node.count[player] * percent) / 100;
-                        if transfer_amount > 0 {
-                            node.count[player] -= transfer_amount;
-                            let order_dir = match dir {
-                                Direction::Outgoing => DIR::FORWARD,
-                                Direction::Incoming => DIR::BACKWARD
-                            };
-                            let new_follow = ArmyGroup { direction: order_dir, progress: 0, count: transfer_amount, player };
-                            edge.transfers.push(new_follow);
-                        }
-                    } else {
-                        panic!("Edge no longer exists");
-                    }
+                    send_out(&mut new_world, data.from, data.to, player, data.percent);
+                }
+                CommandEnum::SendAll(ref data) => {
+                    let node = &mut new_world[data.from];
+                    node.send_all[player] = data.to;
                 }
             }
         }

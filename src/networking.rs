@@ -18,7 +18,7 @@ pub struct SystemConfig{
 pub struct NetworkManager{
     sock: UdpSocket,
     target: SocketAddrV4,
-    received: VecDeque<bool>,
+    received: VecDeque<bool>, //TODO: handle >2 players
 }
 
 const PACKET_CONNECT: u8 = 0;
