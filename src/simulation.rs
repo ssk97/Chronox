@@ -15,19 +15,26 @@ plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deser
 pub const MAX_SIDES:usize = Player::SIZE;
 
 use std::ops;
-
-//This is a dirty hack to ge around E0210.
-impl ops::Index<Player> for [u32;MAX_SIDES]{
-    type Output = u32;
-    fn index(&self, p: Player) -> &u32{
+#[derive(Serialize, Deserialize, Debug, Copy, Clone)]
+pub struct PlayerArr<T>([T;MAX_SIDES]);
+impl <T> ops::Index<Player> for PlayerArr<T>{
+    type Output = T;
+    fn index(&self, p: Player) -> &T{
         let val = p as usize;
-        &self[val]
+        let &PlayerArr(ref x) = self;
+        &x[val]
     }
 }
-impl ops::IndexMut<Player> for [u32;MAX_SIDES]{
-    fn index_mut(&mut self, p: Player) -> &mut u32{
+impl <T> ops::IndexMut<Player> for PlayerArr<T>{
+    fn index_mut(&mut self, p: Player) -> &mut T{
         let val = p as usize;
-        &mut self[val]
+        let &mut PlayerArr(ref mut x) = self;
+        &mut x[val]
+    }
+}
+impl<T: Copy> PlayerArr<T>{
+    pub fn new(val: T) -> PlayerArr<T>{
+        PlayerArr([val;MAX_SIDES])
     }
 }
 
@@ -39,8 +46,9 @@ pub struct GameConfig{
 #[derive(Copy, Clone)]
 pub struct Planet {
     pub loc: Ipt,
-    pub count: [u32;MAX_SIDES],
-    pub fight_progess: [u32;MAX_SIDES],
+    pub count: PlayerArr<u32>,
+    pub fight_progess: PlayerArr<u32>,
+    pub send_all: PlayerArr<Option<NodeInd>>,
     pub owner: Player,
     pub owner_strength: u32,
     pub max_strength: u32,
@@ -49,12 +57,13 @@ pub struct Planet {
 }
 impl Planet{
     pub fn new(loc: Ipt, owner: Player) -> Planet{
-        let mut count = [0;MAX_SIDES];
+        let mut count = PlayerArr::new(0);
         count[owner] = 10;
         Planet{
             loc,
             count,
-            fight_progess: [0;MAX_SIDES],
+            fight_progess: PlayerArr::new(0),
+            send_all: PlayerArr::new(None),
             owner,
             owner_strength: 64,
             max_strength: 64,
@@ -77,7 +86,7 @@ impl Planet{
         let sides_found = find_sides_node(&self);
         let sides_count = sides_found.len();
         if sides_count < 2{//zero out all fighting progress if no battle
-            self.fight_progess = [0;MAX_SIDES];
+            self.fight_progess = PlayerArr::new(0);
             if sides_count == 1{//and advance ownership of the winner
                 if self.count[self.owner] == 0 {//owner has lost
                     self.owner_strength -= 1;

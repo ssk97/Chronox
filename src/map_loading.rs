@@ -45,12 +45,13 @@ pub fn load_map(map: LoadingMap) -> WorldGraph{
         let max_strength = p.max_strength.unwrap_or(64) as u32;
         let spawn_needed = p.spawn_needed.unwrap_or(64) as u32;
 
-        let mut count = [0;MAX_SIDES];
+        let mut count = PlayerArr::new(0);
         count[owner] = p.count.unwrap_or(10) as u32;
         let node = Planet{
             loc,
             count,
-            fight_progess: [0;MAX_SIDES],
+            fight_progess: PlayerArr::new(0),
+            send_all: PlayerArr::new(None),
             owner,
             owner_strength: max_strength,
             max_strength,
