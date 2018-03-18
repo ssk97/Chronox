@@ -36,6 +36,7 @@ pub struct GameConfig{
     pub army_speed: i32
 }
 
+#[derive(Copy, Clone)]
 pub struct Planet {
     pub loc: Ipt,
     pub count: [u32;MAX_SIDES],
@@ -61,25 +62,87 @@ impl Planet{
             spawn_needed: 64,
         }
     }
-}
-pub struct Edge{
-    pub length: i32,
-    pub transfers: Vec<ArmyGroup>
-}
-impl Edge{
-    pub fn new() -> Edge{
-        Edge{transfers: Vec::new(), length: 5000}
+    fn advance(&mut self){
+        //if owned, spawn more
+        if self.owner != Player::PASSIVE {
+            self.spawn_progress += 10;
+            if self.spawn_progress >= self.spawn_needed {
+                self.spawn_progress -= self.spawn_needed;
+                self.count[self.owner] += 1;
+            }
+        } else {
+            self.spawn_progress = 0;
+        }
+        //fight!
+        let sides_found = find_sides_node(&self);
+        let sides_count = sides_found.len();
+        if sides_count < 2{//zero out all fighting progress if no battle
+            self.fight_progess = [0;MAX_SIDES];
+            if sides_count == 1{//and advance ownership of the winner
+                if self.count[self.owner] == 0 {//owner has lost
+                    self.owner_strength -= 1;
+                    if self.owner_strength <= 0{
+                        if self.owner == Player::PASSIVE{
+                            self.owner = sides_found[0];
+                        } else {
+                            self.owner = Player::PASSIVE;
+                            self.owner_strength = self.max_strength;
+                        }
+                    }
+                } else {//owner has won
+                    if self.owner_strength <= self.max_strength {
+                        self.owner_strength += 1
+                    }
+                }
+            }
+        } else {
+            //otherwise, do fighting
+            let mut total_removal = 0;
+            for p_ref in &sides_found{
+                let p = *p_ref;
+                self.fight_progess[p] += self.count[p];//TODO: modify algorithm?
+                let kills = self.fight_progess[p]/100;
+                if kills > 0 {
+                    self.fight_progess[p] -= 100*kills;
+                    self.count[p] += kills;
+                    total_removal += kills;
+                }
+            }
+            if total_removal > 0 {
+                for p_ref in &sides_found {
+                    let p = *p_ref;
+                    if self.count[p] > total_removal {
+                        self.count[p] -= total_removal;
+                    } else {
+                        self.count[p] = 0;
+                    }
+                }
+            }
+        }
     }
 }
-pub enum DIR{FORWARD, BACKWARD}
+#[derive(Copy, Clone)]
 pub struct ArmyGroup{
     pub direction: DIR,
     pub progress: i32,
     pub count: u32,
     pub player: Player
 }
+#[derive(Clone)]
+pub struct HyperLane{
+    pub length: i32,
+    pub transfers: Vec<ArmyGroup>
+}
+#[derive(Copy, Clone)]
+pub enum DIR{FORWARD, BACKWARD}
 
-pub type WorldGraph =  Graph<Planet, Edge, Undirected>;
+impl HyperLane{
+    pub fn new() -> HyperLane{
+        HyperLane{transfers: Vec::new(), length: 5000}
+    }
+}
+
+pub type WorldGraph =  Graph<Planet, HyperLane, Undirected>;
 pub struct Simulation{
     pub world:WorldGraph,
     pub timestep: u64,
@@ -117,15 +180,56 @@ impl Simulation{
         Simulation{world, timestep: 0}
     }
 
-    pub fn handle_orders(&mut self, _conf: &GameConfig, orders: &Vec<Order>){
+    pub fn find_sides(&self, node: NodeInd) -> Vec<Player>{
+        find_sides_node(&self.world[node])
+    }
+
+    //given self, advance a timestep and return the new Simulation representing it
+    pub fn update(&self, conf: &GameConfig, orders: &Vec<Order>) -> Simulation {
+        let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
+        let mut new_world: WorldGraph = self.world.map(
+            |_node_ind, node| {
+                let mut x = node.clone();
+                x.advance();
+                x
+            },
+            |edge_ind, edge| {
+                //move armies around, if at end send them to that planet
+                let mut new_vec = Vec::new();
+                let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
+                let edge_len = edge.length;
+                for group in &edge.transfers {
+                    if group.progress > edge_len {
+                        let ending = match group.direction {
+                            DIR::FORWARD => t_ind,
+                            DIR::BACKWARD => s_ind,
+                        };
+                        transfer_set.push((ending, group.player, group.count));
+                    } else {
+                        new_vec.push(ArmyGroup {
+                            direction: group.direction,
+                            progress: group.progress + conf.army_speed,
+                            count: group.count,
+                            player: group.player
+                        });
+                    }
+                }
+                HyperLane { length: edge_len, transfers: new_vec }
+            }
+        );
+        for removal in transfer_set {
+            let node = &mut new_world[removal.0];
+            node.count[removal.1] += removal.2;
+        }
+
         for order in orders {
             let player = order.player;
             match order.command {
                 CommandEnum::Transport(ref data) => {
                     let percent = data.percent as u32;
-                    let edge_data = self.world.find_edge_undirected(data.from, data.to);
+                    let edge_data = new_world.find_edge_undirected(data.from, data.to);
                     if let Some((edge_ind, dir)) = edge_data {
-                        let (edge, node) = self.world.index_twice_mut(edge_ind, data.from);
+                        let (edge, node) = new_world.index_twice_mut(edge_ind, data.from);
                         let transfer_amount = (node.count[player] * percent) / 100;
                         if transfer_amount > 0 {
                             node.count[player] -= transfer_amount;
@@ -142,96 +246,7 @@ impl Simulation{
                 }
             }
         }
-    }
-    pub fn find_sides(&self, node: NodeInd) -> Vec<Player>{
-        find_sides_node(&self.world[node])
-    }
-
-    pub fn update(&mut self, conf: &GameConfig) {
-        //move armies around, if at end send them to that planet
-        self.timestep += 1;
-        for edge_ind in self.world.edge_indices() {
-            let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
-            let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
-            {
-                let edge = &mut self.world[edge_ind];
-                let edge_len = edge.length;
-                for group in &mut edge.transfers {
-                    group.progress += conf.army_speed;
-                    if group.progress > edge_len {
-                        let ending;
-                        match group.direction {
-                            DIR::FORWARD => ending = t_ind,
-                            DIR::BACKWARD => ending = s_ind
-                        }
-                        transfer_set.push((ending, group.player, group.count));
-                    }
-                }
-                edge.transfers.retain(|ref f| !(f.progress > edge_len));
-            }
-            for removal in transfer_set {
-                let node = &mut self.world[removal.0];
-                node.count[removal.1] += removal.2;
-            }
-        }
-        for node in self.world.node_weights_mut() {
-            //spawn more on owned nodes
-            if node.owner != Player::PASSIVE {
-                node.spawn_progress += 10;
-                if node.spawn_progress >= node.spawn_needed {
-                    node.spawn_progress -= node.spawn_needed;
-                    node.count[node.owner] += 1;
-                }
-            } else {
-                node.spawn_progress = 0;
-            }
-            //fight!
-            let sides_found = find_sides_node(node);
-            let sides_count = sides_found.len();
-            if sides_count < 2{//zero out all fighting progress if no battle
-                node.fight_progess = [0;MAX_SIDES];
-                if sides_count == 1{//and advance ownership of the winner
-                    if node.count[node.owner] == 0 {//owner has lost
-                        node.owner_strength -= 1;
-                        if node.owner_strength <= 0{
-                            if node.owner == Player::PASSIVE{
-                                node.owner = sides_found[0];
-                            } else {
-                                node.owner = Player::PASSIVE;
-                                node.owner_strength = node.max_strength;
-                            }
-                        }
-                    } else {//owner has won
-                        if node.owner_strength <= node.max_strength {
-                            node.owner_strength += 1
-                        }
-                    }
-                }
-            } else {
-                //otherwise, do fighting
-                let mut total_removal = 0;
-                for p_ref in &sides_found{
-                    let p = *p_ref;
-                    node.fight_progess[p] += node.count[p];//TODO: modify algorithm?
-                    let kills = node.fight_progess[p]/100;
-                    if kills > 0 {
-                        node.fight_progess[p] -= 100*kills;
-                        node.count[p] += kills;
-                        total_removal += kills;
-                    }
-                }
-                if total_removal > 0 {
-                    for p_ref in &sides_found {
-                        let p = *p_ref;
-                        if node.count[p] > total_removal {
-                            node.count[p] -= total_removal;
-                        } else {
-                            node.count[p] = 0;
-                        }
-                    }
-                }
-            }
-        }
+        Simulation{world: new_world, timestep: self.timestep+1}
     }
     pub fn check_planets(&self, pos: Ipt, max_dist: i32) -> Option<NodeInd>{
         let mut dist = i32::max_value();

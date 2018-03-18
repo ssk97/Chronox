@@ -62,7 +62,7 @@ pub fn load_map(map: LoadingMap) -> WorldGraph{
         if let Some(edges) = p.edges {
             for e in edges{
                 let other = data.get(&e).unwrap();
-                g.add_edge(node_ind, *other, Edge::new());
+                g.add_edge(node_ind, *other, HyperLane::new());
             }
         }
     }

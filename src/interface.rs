@@ -14,13 +14,19 @@ impl GameInterface{
 
     pub fn mouse_up(&mut self, button: MouseButton, pt: Ipt, player: Player, sim: &Simulation, orders: &mut OrdersType) {
         if let Some(selected) = self.selected {
-            if button == MouseButton::Left {
-                let next_o = sim.check_planets(pt, 96);
-                if let Some(next) = next_o {
-                    if next != selected {
-                        if sim.world.contains_edge(selected, next){
-                            let command = TransportCommand{from: selected, to: next, percent: 50};
-                            let order = Order{player: player, command: CommandEnum::Transport(command)};
+            let next_o = sim.check_planets(pt, 96);
+            if let Some(next) = next_o {
+                if next != selected {
+                    if sim.world.contains_edge(selected, next){
+                        let check_command = match button{
+                            MouseButton::Left => {
+                                let c = TransportCommand{from: selected, to: next, percent: 50};
+                                Some(CommandEnum::Transport(c))
+                            },
+                            _ => None
+                        };
+                        if let Some(command) = check_command {
+                            let order = Order { player, command};
                             orders.back_mut().unwrap().push(order);
                         }
                     }

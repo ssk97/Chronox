@@ -193,8 +193,7 @@ impl event::EventHandler for MainState {
                 while self.check_update() {
                     self.turn_tick();
                     self.orders.push_back(Vec::new());
-                    self.sim.handle_orders(&self.conf.game, &(self.orders.pop_front().unwrap()));
-                    self.sim.update(&self.conf.game);
+                    self.sim = self.sim.update(&self.conf.game, &(self.orders.pop_front().unwrap()));
                     self.send_commands();
                 }
             }
