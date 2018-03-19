@@ -1,15 +1,13 @@
 [system]
-tick_time = 100
-command_delay = 4
 port_from= 40004
 port_to= 40004
-
-[render]
-#hex colors [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]
-colors = [8421504, 16711680, 65280, 255, 12632064]
-
-[game]
-army_speed = 100
+tick_time = 100
+command_delay = 4
 
 [interface]
 scroll_speed = 2
+#hex colors [0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000]
+colors = [8421504, 16711680, 65280, 255, 12632064]
+ui_height = 100
+width = 1200
+height = 700

@@ -36,13 +36,12 @@ fn to_Ipt(p: Vec<i64>) -> Ipt{
 //returns the graph
 pub fn load_map(map: LoadingMap) -> WorldGraph{
 
-    let mut g = Graph::new_undirected();
+    let mut g = Graph::default();
     let mut data: HashMap<String, NodeInd> = HashMap::new();
     for p in map.planet{
         let loc = to_Ipt(p.loc);
         let owner = Player::from_i64(p.owner.unwrap_or(Player::PASSIVE as i64)).unwrap();
         let max_strength = p.max_strength.unwrap_or(64) as u32;
-        let spawn_needed = p.spawn_needed.unwrap_or(64) as u32;
 
         let mut count = PlayerArr::new(0);
         count[owner] = p.count.unwrap_or(10) as u32;
@@ -55,7 +54,6 @@ pub fn load_map(map: LoadingMap) -> WorldGraph{
             owner_strength: max_strength,
             max_strength,
             spawn_progress: 0,
-            spawn_needed,
         };
         let node_ind = g.add_node(node);
         data.insert(p.id, node_ind);

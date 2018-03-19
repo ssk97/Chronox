@@ -3,22 +3,30 @@ use library::*;
 
 pub use orders::*;
 pub use petgraph::prelude::*;
-pub type NodeInd = NodeIndex<u32>;
-pub type EdgeInd = EdgeIndex<u32>;
+pub type NodeInd = NodeIndex<u16>;
+pub type EdgeInd = EdgeIndex<u16>;
 
-use plain_enum::*;
+pub use plain_enum::*;
 plain_enum_mod!(player_enum, derive(FromPrimitive, ToPrimitive, Serialize, Deserialize,), map_derive(Serialize, Deserialize, Copy, ), Player {
     PASSIVE,
-    P1, P2, P3, P4,
+    P1, P2, /*P3, P4,*/
 });
 
 pub type PlayerArr<T> = EnumMap<Player, T>;
 
-#[derive(Serialize, Deserialize, Debug)]
-pub struct GameConfig{
-    pub army_speed: i32
-}
+pub const ARMY_SPEED: i32 = 100;
+pub const SPAWN_NEEDED: u32 = 64;
 
+pub struct SimMetadata{
+    pub total_planet: PlayerArr<u32>,
+    pub total_dead: PlayerArr<u32>,
+    pub total_transit: PlayerArr<u32>,
+}
+impl SimMetadata{
+    pub fn new()->SimMetadata{
+        SimMetadata{total_planet: PlayerArr::new(0), total_dead:PlayerArr::new(0), total_transit:PlayerArr::new(0)}
+    }
+}
 #[derive(Copy, Clone)]
 pub struct Planet {
     pub loc: Ipt,
@@ -29,7 +37,6 @@ pub struct Planet {
     pub owner_strength: u32,
     pub max_strength: u32,
     pub spawn_progress: u32,
-    pub spawn_needed: u32,
 }
 impl Planet{
     pub fn new(loc: Ipt, owner: Player) -> Planet{
@@ -44,15 +51,14 @@ impl Planet{
             owner_strength: 64,
             max_strength: 64,
             spawn_progress: 0,
-            spawn_needed: 64,
         }
     }
-    fn advance(&mut self){
+    fn advance(&mut self, total_planet: &mut PlayerArr<u32>, total_dead: &mut PlayerArr<u32>){
         //if owned, spawn more
         if self.owner != Player::PASSIVE {
             self.spawn_progress += 10;
-            if self.spawn_progress >= self.spawn_needed {
-                self.spawn_progress -= self.spawn_needed;
+            if self.spawn_progress >= SPAWN_NEEDED{
+                self.spawn_progress -= SPAWN_NEEDED;
                 self.count[self.owner] += 1;
             }
         } else {
@@ -60,6 +66,9 @@ impl Planet{
         }
         //fight!
         let sides_found = find_sides_node(&self);
+        for side in sides_found.clone(){
+            total_planet[side] += self.count[side];
+        }
         let sides_count = sides_found.len();
         if sides_count < 2{//zero out all fighting progress if no battle
             self.fight_progess = PlayerArr::new(0);
@@ -82,24 +91,18 @@ impl Planet{
             }
         } else {
             //otherwise, do fighting
-            let mut total_removal = 0;
             for p_ref in &sides_found{
                 let p = *p_ref;
                 self.fight_progess[p] += self.count[p];//TODO: modify algorithm?
                 let kills = self.fight_progess[p]/100;
                 if kills > 0 {
                     self.fight_progess[p] -= 100*kills;
-                    self.count[p] += kills;
-                    total_removal += kills;
-                }
-            }
-            if total_removal > 0 {
-                for p_ref in &sides_found {
-                    let p = *p_ref;
-                    if self.count[p] > total_removal {
-                        self.count[p] -= total_removal;
-                    } else {
-                        self.count[p] = 0;
+                    for p2_ref in &sides_found {
+                        let p2 = *p2_ref;
+                        if p2 != p {
+                            self.count[p2] += kills;
+                            total_dead[p2] += kills;
+                        }
                     }
                 }
             }
@@ -127,10 +130,10 @@ impl HyperLane{
     }
 }
 
-pub type WorldGraph =  Graph<Planet, HyperLane, Undirected>;
+pub type WorldGraph =  Graph<Planet, HyperLane, Undirected, u16>;
 pub struct Simulation{
     pub world:WorldGraph,
-    pub timestep: u64,
+    pub timestep: ChronalTime,
 }
 
 
@@ -173,66 +176,73 @@ impl Simulation{
     }
 
     //given self, advance a timestep and return the new Simulation representing it
-    pub fn update(&self, conf: &GameConfig, orders: &Vec<Order>) -> Simulation {
+    pub fn update(&self, orders: &Vec<ChronalCommand>) -> (Simulation, SimMetadata) {
         let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
-        let mut new_world: WorldGraph = self.world.map(
-            |_node_ind, node| {
-                let mut new_node = node.clone();
-                new_node.advance();
-                new_node
-            },
-            |edge_ind, edge| {
-                //move armies around, if at end send them to that planet
-                let mut new_vec = Vec::new();
-                let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
-                let edge_len = edge.length;
-                for group in &edge.transfers {
-                    if group.progress > edge_len {
-                        let ending = match group.direction {
-                            DIR::FORWARD => t_ind,
-                            DIR::BACKWARD => s_ind,
-                        };
-                        transfer_set.push((ending, group.player, group.count));
-                    } else {
-                        new_vec.push(ArmyGroup {
-                            direction: group.direction,
-                            progress: group.progress + conf.army_speed,
-                            count: group.count,
-                            player: group.player
-                        });
+        let mut metadata = SimMetadata::new();
+        let mut new_world: WorldGraph;
+        {//metadata borrow scope
+            let total_dead = &mut metadata.total_dead;
+            let total_planet = &mut metadata.total_planet;
+            let total_transit = &mut metadata.total_transit;
+            new_world = self.world.map(
+                |_node_ind, node| {
+                    let mut new_node = node.clone();
+                    new_node.advance(total_planet, total_dead);
+                    new_node
+                },
+                |edge_ind, edge| {
+                    //move armies around, if at end send them to that planet
+                    let mut new_vec = Vec::new();
+                    let (s_ind, t_ind) = self.world.edge_endpoints(edge_ind).unwrap();
+                    let edge_len = edge.length;
+                    for group in &edge.transfers {
+                        total_transit[group.player] += group.count;
+                        if group.progress > edge_len {
+                            let ending = match group.direction {
+                                DIR::FORWARD => t_ind,
+                                DIR::BACKWARD => s_ind,
+                            };
+                            transfer_set.push((ending, group.player, group.count));
+                        } else {
+                            new_vec.push(ArmyGroup {
+                                direction: group.direction,
+                                progress: group.progress + ARMY_SPEED,
+                                count: group.count,
+                                player: group.player
+                            });
+                        }
+                    }
+                    HyperLane { length: edge_len, transfers: new_vec }
+                }
+            );
+            for removal in transfer_set {
+                let node = &mut new_world[removal.0];
+                node.count[removal.1] += removal.2;
+            }
+            //every half-second (5 timesteps) check for "send all" commands
+            if self.timestep % 5 == 0 {
+                for node_ind in new_world.node_indices() {
+                    for p in Player::values() {
+                        if let Some(target) = new_world[node_ind].send_all[p] {
+                            send_out(&mut new_world, node_ind, target, p, 100);
+                        }
                     }
                 }
-                HyperLane { length: edge_len, transfers: new_vec }
             }
-        );
-        for removal in transfer_set {
-            let node = &mut new_world[removal.0];
-            node.count[removal.1] += removal.2;
-        }
-        //every half-second (5 timesteps) check for "send all" commands
-        if self.timestep%5 == 0 {
-            for node_ind in new_world.node_indices() {
-                for p in Player::values() {
-                    if let Some(target) = new_world[node_ind].send_all[p] {
-                        send_out(&mut new_world, node_ind, target, p, 100);
-                    }
-                }
-            }
-        }
 
-        for order in orders {
-            let player = order.player;
-            match order.command {
-                CommandEnum::Transport(ref data) => {
-                    send_out(&mut new_world, data.from, data.to, player, data.percent);
-                }
-                CommandEnum::SendAll(ref data) => {
-                    let node = &mut new_world[data.from];
-                    node.send_all[player] = data.to;
+            for order in orders {
+                match order {
+                    &ChronalCommand::Transport(ref data) => {
+                        send_out(&mut new_world, data.from, data.to, data.player, data.percent);
+                    }
+                    &ChronalCommand::SendAll(ref data) => {
+                        let node = &mut new_world[data.from];
+                        node.send_all[data.player] = data.to;
+                    }
                 }
             }
         }
-        Simulation{world: new_world, timestep: self.timestep+1}
+        (Simulation{world: new_world, timestep: self.timestep+1}, metadata)
     }
     pub fn check_planets(&self, pos: Ipt, max_dist: i32) -> Option<NodeInd>{
         let mut dist = i32::max_value();

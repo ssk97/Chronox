@@ -28,6 +28,11 @@ pub fn lendir(len: f32, dir: f32) -> Vector2
     let (y, x) = dir.sin_cos();
     Vector2::new(x*len, y*len)
 }
+pub fn progress(val: f32, lower: f32, upper: f32) -> f32{
+    let amount = val-lower;
+    let total = upper-lower;
+    amount/total
+}
 
 pub struct NumericFont{ //Used for drawing rapidly-changing text via a pre-rendered font
     glyphs: Vec<Text>,

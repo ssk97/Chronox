@@ -76,11 +76,11 @@ impl NetworkManager{
         }
         return false;
     }
-    fn process_commands(&mut self, orders: &mut OrdersType, buf: &[u8], turn_t: u64, conf: &SystemConfig){
+    fn process_commands(&mut self, orders: &mut CommandBuffer, buf: &[u8], turn_t: u64, conf: &SystemConfig){
         let rec_turn_t: u64 =  deserialize_from(&buf[0..8]).unwrap();
         let rec_turn = rec_turn_t as usize;
         let turn = turn_t as usize;
-        let mut rec_orders: OrdersType = deserialize_from(&buf[8..]).unwrap();
+        let mut rec_orders: CommandBuffer = deserialize_from(&buf[8..]).unwrap();
         let from = max(turn, rec_turn);
         let to = min(turn+conf.command_delay, rec_turn+rec_orders.len());
         println!("from:{},to:{},rec_orders:{},orders:{},recieved:{:?}",from, to, rec_orders.len(), orders.len(), self.received);
@@ -97,7 +97,7 @@ impl NetworkManager{
             }
         }
     }
-    pub fn receive_commands(&mut self, orders: &mut VecDeque<Vec<Order>>, turn: u64, conf: &SystemConfig){
+    pub fn receive_commands(&mut self, orders: &mut CommandBuffer, turn: u64, conf: &SystemConfig){
         let mut buf = [0; 512];
         //first check if someone is connecting to us
         match self.sock.recv_from(&mut buf) {
@@ -128,7 +128,7 @@ impl NetworkManager{
             Err(e) => println!("encountered IO error: {}", e),
         }
     }
-    pub fn send_commands(&mut self, orders: &OrdersType, turn: u64){
+    pub fn send_commands(&mut self, orders: &CommandBuffer, turn: u64){
         let mut buf = Vec::new();
         buf.push(PACKET_ORDER);
         serialize_into(&mut buf, &turn).unwrap();

@@ -1,14 +1,10 @@
 use ggez::*;
 use ggez::graphics::*;
 use simulation::*;
+use timeline::*;
 use interface::*;
 use library::*;
 use std::f32::consts::PI;
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct RenderConfig{
-    pub colors: Vec<u32>
-}
 
 struct GlobalResources{
     font: Font,
@@ -26,7 +22,7 @@ impl GlobalResources{
     }
 }
 
-fn set_col(ctx: &mut Context, conf: &RenderConfig, player: Player) -> GameResult<()>{
+fn set_col(ctx: &mut Context, conf: &InterfaceConfig, player: Player) -> GameResult<()>{
     let col = conf.colors[player as usize];
     set_color(ctx, Color::from_rgb_u32(col))?;
     Ok(())
@@ -39,7 +35,8 @@ impl Renderer {
         let resources = GlobalResources::new(ctx)?;
         Ok(Renderer{resources})
     }
-    pub fn render(&self, ctx: &mut Context, conf: &RenderConfig, game_conf: &GameConfig, sim: &Simulation, interface: &GameInterface, dt: f32) -> GameResult<()> {
+    pub fn render(&self, ctx: &mut Context, conf: &InterfaceConfig, player: Player, timeline: &Timeline, interface: &GameInterface, dt: f32) -> GameResult<()> {
+        let sim = &timeline[player];
         //transform from scrolling
         let screen = |loc| {(loc-interface.center_loc)};
 
@@ -49,10 +46,11 @@ impl Renderer {
             let t = &sim.world[edge_ref.target()];
             let s_loc = screen(gpt(s.loc));
             let t_loc = screen(gpt(t.loc));
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
             line(ctx, &[s_loc, t_loc], 2.)?;
             let edge = edge_ref.weight();
             for group in &edge.transfers {
-                let future_progress = ((group.progress as f32)+((game_conf.army_speed as f32)*dt))/(edge.length as f32);
+                let future_progress = ((group.progress as f32)+((ARMY_SPEED as f32)*dt))/(edge.length as f32);
                 let vis_progress = match group.direction {
                     DIR::FORWARD => future_progress,
                     DIR::BACKWARD => 1.0 - future_progress
@@ -110,15 +108,39 @@ impl Renderer {
 
         //draw UI
         {
-            let (width_u, height_u) = get_size(ctx);
-            let width = width_u as f32;
-            let height = height_u as f32;
-
-            let upper_edge = height*0.9;
+            let width = conf.width as f32;
+            let height = conf.height as f32;
+            let ui_height = conf.ui_height as f32;
+            let upper_edge = height-ui_height;
             set_color(ctx, Color::from_rgba(200, 200, 200, 255))?;
             rectangle(ctx, DrawMode::Fill, Rect::new(0.,upper_edge,width,height-upper_edge))?;
             set_color(ctx, Color::from_rgba(255, 255, 255, 128))?;
             line(ctx, &[pt(0.,upper_edge), pt(width,upper_edge)], 2.)?;
+
+            set_color(ctx, Color::from_rgba(0, 128, 128, 128))?;
+            let mut left_edge = timeline.left_edge as f32;
+            let mut right_edge = timeline.right_edge as f32;
+            let present = (timeline.present as f32)+dt;
+            if present < 1000.0 {
+                right_edge += 2.0*dt;
+            } else {
+                right_edge += 1.0*dt;
+                left_edge += 1.0*dt;
+            }
+
+            for wave in &timeline.timewaves{
+                let time = wave.time as f32+(dt*(wave.speed as f32));
+                let x_pos = progress(time, left_edge, right_edge)*width;
+                line(ctx, &[pt(x_pos, upper_edge),pt(x_pos, height)],2.)?;
+            }
+
+            for player in Player::values(){
+                set_col(ctx, conf, player)?;
+                let wave = timeline.player_timewaves[player];
+                let time = wave.time as f32+(dt*(wave.speed as f32));
+                let x_pos = progress(time, left_edge, right_edge)*width;
+                line(ctx, &[pt(x_pos, upper_edge),pt(x_pos, height)],2.)?;
+            }
         }
 
         Ok(())

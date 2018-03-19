@@ -36,6 +36,8 @@ mod renderer;
 use renderer::*;
 mod interface;
 use interface::*;
+mod timeline;
+use timeline::*;
 
 extern crate toml;
 extern crate bincode;
@@ -47,19 +49,25 @@ extern crate serde_derive;
 #[derive(Serialize, Deserialize, Debug)]
 struct Config{
     system: SystemConfig,
-    render: RenderConfig,
-    game: GameConfig,
     interface: InterfaceConfig,
 }
 use std::default::Default;
 impl Default for Config{
     fn default() -> Config{
-        let system = SystemConfig{tick_time: 100, command_delay: 4, port_from: Some(40004), port_to: Some(40004)};
-        let render = RenderConfig{colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000] };
-        let game = GameConfig{army_speed: 100};
-        let interface = InterfaceConfig{scroll_speed: 2.0};
+        let system = SystemConfig{
+            tick_time: 100,
+            command_delay: 4,
+            port_from: Some(40004),
+            port_to: Some(40004)
+        };
+        let interface = InterfaceConfig{
+            scroll_speed: 2.0,
+            colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000],
+            ui_height: 100,
+            width: 1200, height: 700
+        };
         Config{
-            system, render, game, interface,
+            system, interface,
         }
     }
 }
@@ -68,13 +76,13 @@ enum MenuState{
     Playing,
 }
 struct MainState {
-    sim: Simulation,
+    timeline: Timeline,
     renderer: Renderer,
     interface: GameInterface,
     networking: Option<NetworkManager>,
     conf: Config,
 
-    orders: OrdersType,
+    orders: CommandBuffer,
     player: Player,
 
     frame: u64,
@@ -102,6 +110,7 @@ impl MainState {
         let level: map_loading::LoadingMap = toml::from_slice(&buffer_l).unwrap();
         let graph = map_loading::load_map(level);
         let sim = Simulation::new(graph);
+        let timeline = Timeline::new(sim);
         let renderer = Renderer::new(ctx)?;
         let mut orders = VecDeque::new();
         for _ in 0..conf.system.command_delay{
@@ -130,7 +139,7 @@ impl MainState {
         };
         let interface = GameInterface::new();
         let s = MainState {
-            sim, renderer, interface, networking, conf, orders, player,
+            timeline, renderer, interface, networking, conf, orders, player,
             frame: 0, turn: 0, residual_update_dt: time::Duration::from_secs(0),
             last_instant: time::Instant::now(), last_turn: time::Instant::now(), state
         };
@@ -173,6 +182,7 @@ impl MainState {
                     n.advance();
                     true
                 } else {
+                    n.send_commands(&mut self.orders, self.turn);
                     false
                 }
             } else {
@@ -205,7 +215,7 @@ impl event::EventHandler for MainState {
                 while self.check_update() {
                     self.turn_tick();
                     self.orders.push_back(Vec::new());
-                    self.sim = self.sim.update(&self.conf.game, &(self.orders.pop_front().unwrap()));
+                    self.timeline.evaluate_timestep(self.orders.pop_front().unwrap());
                     self.send_commands();
                 }
             }
@@ -226,7 +236,7 @@ impl event::EventHandler for MainState {
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
-        self.renderer.render(ctx, &self.conf.render, &self.conf.game, &self.sim, &self.interface, self.dt())?;
+        self.renderer.render(ctx, &self.conf.interface, self.player, &self.timeline, &self.interface, self.dt())?;
         graphics::present(ctx);
         Ok(())
     }
@@ -237,7 +247,7 @@ impl event::EventHandler for MainState {
                              button: MouseButton,
                              x: i32,
                              y: i32) {
-        self.interface.mouse_up(button, ipt(x, y), self.player, &self.sim, &mut self.orders);
+        self.interface.mouse_up(button, ipt(x, y), self.player, &self.timeline, &mut self.orders, &self.conf.interface);
     }
 
     fn mouse_button_down_event(&mut self,
@@ -245,7 +255,7 @@ impl event::EventHandler for MainState {
                                button: MouseButton,
                                x: i32,
                                y: i32) {
-        self.interface.mouse_down(button, ipt(x, y), self.player, &self.sim, &mut self.orders);
+        self.interface.mouse_down(button, ipt(x, y), self.player, &self.timeline, &mut self.orders, &self.conf.interface);
     }
 
     //event::Mod to fix unresolved reference failure in IDE
