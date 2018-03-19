@@ -258,6 +258,17 @@ impl event::EventHandler for MainState {
         self.interface.mouse_down(button, ipt(x, y), self.player, &self.timeline, &mut self.orders, &self.conf.interface);
     }
 
+    fn mouse_motion_event(
+        &mut self,
+        _ctx: &mut Context,
+        state: MouseState,
+        _x: i32,
+        _y: i32,
+        xrel: i32,
+        yrel: i32, ) {
+        self.interface.mouse_move(state, Vector2::new(xrel as f32, yrel as f32));
+    }
+
     //event::Mod to fix unresolved reference failure in IDE
     fn key_down_event(&mut self, _ctx: &mut Context, keycode: Keycode, _keymod: event::Mod, _repeat: bool) {
         if !_repeat{

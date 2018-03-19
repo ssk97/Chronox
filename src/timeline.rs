@@ -69,7 +69,6 @@ impl Timeline{
             }
         }
         //move timeline forward
-        self.present += 1;
         if self.present < 1000 {
             self.right_edge += 2;
         } else {
@@ -77,9 +76,10 @@ impl Timeline{
             self.left_edge += 1;
             self.multiverse.pop_front();
         }
+        self.present += 1;
 
-        if self.present%40 == 0{
-            self.timewaves.push_front(Timewave{time:self.left_edge+1, speed: 3});
+        if (self.present+self.left_edge)%40 == 0{//Current increments by 2 so won't skip... FOR NOW
+            self.timewaves.push_front(Timewave{time:self.left_edge+1, speed: 3});//TODO: make not skip ever
         }
 
         //move timewaves forward

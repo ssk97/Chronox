@@ -86,7 +86,7 @@ impl Renderer {
                 let mut angle = PI/2.0;
                 for player in involved{
                     set_col(ctx, conf, player)?;
-                    let loc = screen(node_loc+lendir(16.0, angle));
+                    let loc = node_loc+lendir(16.0, angle);
                     self.resources.num_font.draw_centered(ctx, loc, node.count[player]) ?;
                     angle += angle_increment;
                 }
@@ -140,6 +140,19 @@ impl Renderer {
                 let time = wave.time as f32+(dt*(wave.speed as f32));
                 let x_pos = progress(time, left_edge, right_edge)*width;
                 line(ctx, &[pt(x_pos, upper_edge),pt(x_pos, height)],2.)?;
+            }
+
+            set_color(ctx, Color::from_rgba(0, 0, 0, 128))?;
+            const TICK_SIZE: f32 = 50.;
+            let mut time_ticker = (left_edge/TICK_SIZE).round()*TICK_SIZE;
+            let ticker_height = ui_height*0.05;
+            while time_ticker <= right_edge{
+                let x_pos = progress(time_ticker, left_edge, right_edge)*width;
+                const MULT_ARR: [u8;12] = [10, 1, 2, 3, 2, 1, 5, 1, 2, 3, 2, 1];
+                let mult_index = ((time_ticker/TICK_SIZE).round() as usize) % (MULT_ARR.len());
+                let multiplier = MULT_ARR[mult_index] as f32;
+                line(ctx, &[pt(x_pos, upper_edge),pt(x_pos, upper_edge+ticker_height*multiplier)],2.)?;
+                time_ticker += TICK_SIZE;
             }
         }
 

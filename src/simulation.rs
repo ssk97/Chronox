@@ -100,8 +100,13 @@ impl Planet{
                     for p2_ref in &sides_found {
                         let p2 = *p2_ref;
                         if p2 != p {
-                            self.count[p2] += kills;
-                            total_dead[p2] += kills;
+                            if self.count[p2] > kills {
+                                total_dead[p2] += kills;
+                                self.count[p2] -= kills;
+                            } else {
+                                total_dead[p2] += self.count[p2];
+                                self.count[p2] = 0;
+                            }
                         }
                     }
                 }

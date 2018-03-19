@@ -115,6 +115,11 @@ impl GameInterface {
             }
         }
     }
+    pub fn mouse_move(&mut self, state: MouseState, rel: Vector2){
+        if state.middle() {
+            self.center_loc -= rel;
+        }
+    }
 
     pub fn key_down(&mut self, keycode: Keycode) {
         if let Some(key) = to_keystate(keycode) {
