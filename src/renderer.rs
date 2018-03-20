@@ -14,9 +14,9 @@ struct GlobalResources{
 impl GlobalResources{
     fn new(ctx: &mut Context) -> GameResult<GlobalResources>{
         let font =  graphics::Font::new(ctx, "/Tuffy.ttf", 24)?;
-        let num_font = PrerenderedFont::new(ctx, &font)?;
+        let num_font = PrerenderedFont::new(ctx, &font, "0123456789")?;
         let small_font =  graphics::Font::new(ctx, "/Tuffy.ttf", 16)?;
-        let small_num_font = PrerenderedFont::new(ctx, &small_font)?;
+        let small_num_font = PrerenderedFont::new(ctx, &small_font, "0123456789:")?;
         let g = GlobalResources { font, num_font, small_num_font};
         Ok(g)
     }
@@ -61,7 +61,7 @@ impl Renderer {
                 set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
                 circle(ctx, DrawMode::Fill, loc, radius, 0.25)?;
                 set_col(ctx, conf, group.player)?;
-                self.resources.small_num_font.draw_centered(ctx, loc, group.count)?;
+                self.resources.small_num_font.draw_centered(ctx, loc, group.count.to_string())?;
             }
         }
 
@@ -79,7 +79,7 @@ impl Renderer {
             if involved.len() == 1 {
                 let player = involved[0];
                 set_col(ctx, conf, player)?;
-                self.resources.num_font.draw_centered(ctx, node_loc, node.count[player])?;
+                self.resources.num_font.draw_centered(ctx, node_loc, node.count[player].to_string())?;
             } else if involved.len() > 1 {
                 let count = involved.len() as f32;
                 let angle_increment = 2.0*PI/count;
@@ -87,7 +87,7 @@ impl Renderer {
                 for player in involved{
                     set_col(ctx, conf, player)?;
                     let loc = node_loc+lendir(16.0, angle);
-                    self.resources.num_font.draw_centered(ctx, loc, node.count[player]) ?;
+                    self.resources.num_font.draw_centered(ctx, loc, node.count[player].to_string()) ?;
                     angle += angle_increment;
                 }
             }
@@ -139,6 +139,13 @@ impl Renderer {
                 let mult_index = ((time_ticker / TICK_SIZE).round() as usize) % (MULT_ARR.len());
                 let multiplier = MULT_ARR[mult_index] as f32;
                 line(ctx, &[pt(x_pos, upper_edge), pt(x_pos, upper_edge + ticker_height * multiplier)], 2.)?;
+                if multiplier > 2. {
+                    let time = time_ticker/600.;
+                    let minutes = time.trunc();
+                    let seconds = (time.fract()*60.).trunc();
+                    let loc = pt(x_pos, upper_edge+ticker_height*multiplier);
+                    self.resources.small_num_font.draw_centered_h(ctx, loc, format!("{}:{:02}",minutes,seconds))?;
+                }
                 time_ticker += TICK_SIZE;
             }
             //metadata graphs - line graph of living

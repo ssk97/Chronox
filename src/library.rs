@@ -3,6 +3,7 @@ use ggez::graphics::*;
 pub use ggez::graphics::{Point2, Vector2};
 pub use ggez::nalgebra as na;
 use std::cmp::*;
+use std::collections::HashMap;
 use num::Num;
 
 pub type Ipt = na::Point2<i32>;
@@ -38,66 +39,58 @@ pub fn lerp(val: f32, lower: f32, upper: f32) -> f32{
     (val*spread)+lower
 }
 
+struct Glyph{
+    text: Text,
+    width: f32,
+}
 pub struct PrerenderedFont{ //Used for drawing rapidly-changing text via a pre-rendered font
-    glyphs: Vec<Text>,
-    widths: Vec<f32>,
+    glyphs: HashMap<char, Glyph>,
     maxw: f32,
     maxh: f32
 }
 impl PrerenderedFont{
-    pub fn new(ctx: &mut Context, font: &Font) -> GameResult<PrerenderedFont>{
-        let mut glyphs = Vec::new();
-        let mut widths = Vec::new();
+    pub fn new(ctx: &mut Context, font: &Font, chars: &str) -> GameResult<PrerenderedFont>{
+        let mut glyphs = HashMap::new();
         let mut maxh = 0;
         let mut maxw = 0;
-        for i in 0..10{
-            let glyph = Text::new(ctx, &i.to_string(), font)?;
-            maxw = maxw.max(glyph.width());
-            maxh = maxh.max(glyph.height());
-            widths.push(glyph.width() as f32);
-            glyphs.push(glyph);
+        for c in chars.chars(){
+            let text = Text::new(ctx, &(c.to_string()), font)?;
+            maxw = maxw.max(text.width());
+            maxh = maxh.max(text.height());
+            let width = text.width() as f32;
+            let glyph = Glyph{text, width};
+            glyphs.insert(c, glyph);
         }
-        Ok(PrerenderedFont {glyphs, widths, maxw: maxw as f32, maxh: maxh as f32})
+        Ok(PrerenderedFont {glyphs, maxw: maxw as f32, maxh: maxh as f32})
     }
-    pub fn draw<N: Into<u64>>(&self, ctx: &mut Context, loc: Point2, number: N) -> GameResult<()>{
-        let mut stack = Vec::new();
-        let mut num = number.into() as usize;
-        loop {
-            let digit = num%10;
-            num /= 10;
-            stack.push(digit);
-            if num <= 0 {break;}
-        }
+    pub fn draw<S: Into<String>>(&self, ctx: &mut Context, loc: Point2, str_base: S) -> GameResult<()>{
+        let str_data = str_base.into();
         let mut pos = loc;
-        while let Some(digit) = stack.pop(){
-            graphics::draw(ctx, & self.glyphs[digit], pos, 0.0)?;
-            let width = self.widths[digit];
-            pos += Vector2::new(width, 0.0);
+        for c in str_data.chars() {
+            let glyph = & self.glyphs[&c];
+            graphics::draw(ctx, &glyph.text, pos, 0.0)?;
+            pos += Vector2::new(glyph.width, 0.0);
         }
         Ok(())
     }
-    pub fn draw_centered<N: Into<u64>>(&self, ctx: &mut Context, loc: Point2, number: N) -> GameResult<()>{
+    pub fn draw_centered<S: Into<String>>(&self, ctx: &mut Context, loc: Point2, str_base: S) -> GameResult<()>{
         let mut stack = Vec::new();
-        let mut num = number.into() as usize;
+        let str_data = str_base.into();
         let mut total_width = 0.0;
-        loop {
-            let digit = num%10;
-            num /= 10;
-            let glyph = & self.glyphs[digit];
-            let width = self.widths[digit];
-            stack.push((width, glyph));
-            total_width += width;
-            if num <= 0 {break;}
+        for c in str_data.chars().rev() {
+            let glyph = & self.glyphs[&c];
+            stack.push(glyph);
+            total_width += glyph.width;
         }
         let mut pos = loc - Vector2::new(total_width/2.0, self.maxh/2.0);
-        while let Some((width, digit)) = stack.pop(){
-            graphics::draw(ctx, digit, pos, 0.0)?;
-            pos += Vector2::new(width, 0.0);
+        while let Some(glyph) = stack.pop(){
+            graphics::draw(ctx, &glyph.text, pos, 0.0)?;
+            pos += Vector2::new(glyph.width, 0.0);
         }
         Ok(())
     }
-    pub fn get_glyph(&self, digit: usize) -> &Text{
-        &self.glyphs[digit]
+    pub fn draw_centered_h<S: Into<String>>(&self, ctx: &mut Context, loc: Point2, str_base: S) -> GameResult<()>{
+        self.draw_centered(ctx,loc+Vector2::new(0.0, self.maxh/2.0),str_base)
     }
     pub fn get_maxw(&self) -> f32{
         self.maxw
