@@ -25,6 +25,7 @@ pub struct InterfaceConfig{
     pub scroll_speed: f32,
     pub colors: Vec<u32>,
     pub ui_height: i32,
+    pub energy_bar_height: i32,
     pub width: i32,
     pub height: i32,
 }
@@ -34,9 +35,10 @@ pub struct GameInterface{
     keyboard: KeyboardStates,
 }
 
-fn chronal_event(command: ChronalCommand, timestep: ChronalTime, orders: &mut CommandBuffer){
+fn chronal_event(command: ChronalCommand, timestep: ChronalTime, player: Player, orders: &mut CommandBuffer){
     let event = ChronalEvent{time: timestep+(orders.len() as ChronalTime), command};
-    let order = AchronalEvent::Chronal(event);
+    let event = AchronalEvent::Chronal(event);
+    let order = AchronalCommand{player, event};
     orders.back_mut().unwrap().push(order);
 }
 impl GameInterface {
@@ -65,9 +67,9 @@ impl GameInterface {
             let x_pos = (pt.x as f32)/width;
             let time = x_pos*((timeline.right_edge - timeline.left_edge) as f32);
             let time_to = (time as ChronalTime)+timeline.left_edge;
-            let event = TimejumpCommand{time_to, player};
-            let order = AchronalEvent::Timejump(event);
-            orders.back_mut().unwrap().push(order);
+            let event = AchronalEvent::Timejump(time_to);
+            let command = AchronalCommand{event, player};
+            orders.back_mut().unwrap().push(command);
 
         } else {
             let world_pt = pt + na::Vector2::new(self.center_loc.x.round() as i32, self.center_loc.y.round() as i32);
@@ -80,7 +82,7 @@ impl GameInterface {
                                 if sim.world.contains_edge(selected, next) {
                                     let transport = TransportCommand { player, from: selected, to: next, percent: 50 };
                                     let command = ChronalCommand::Transport(transport);
-                                    chronal_event(command, sim.timestep, orders);
+                                    chronal_event(command, sim.timestep, player, orders);
                                 }
                             }
                         }
@@ -96,7 +98,7 @@ impl GameInterface {
                             }
                         }
                         let command = ChronalCommand::SendAll(send_all);
-                        chronal_event(command, sim.timestep, orders);
+                        chronal_event(command, sim.timestep, player, orders);
                     }
                     _ => {},
                 }

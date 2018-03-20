@@ -2,6 +2,8 @@
 use simulation::*;
 use std::collections::{VecDeque, BTreeSet};
 use std::ops::Index;
+type ChronoEnergy = u16;
+pub const MAX_CHRONOENERGY: ChronoEnergy = 500;
 struct TimePoint{
     world: Simulation,
     commands: Vec<ChronalCommand>,
@@ -17,18 +19,20 @@ pub struct Timeline{
     pub left_edge: ChronalTime,
     pub right_edge: ChronalTime,
     pub present: ChronalTime,
-    pub player_timewaves: PlayerArr<Timewave>,
     pub timewaves: VecDeque<Timewave>,
+    pub player_timewaves: PlayerArr<Timewave>,
+    pub chrono_energy: PlayerArr<ChronoEnergy>,
 }
 impl Timeline{
     pub fn new(starting: Simulation) -> Timeline{
         let mut multiverse = VecDeque::new();
         let timepoint = TimePoint{commands: Vec::new(), world: starting, metadata: SimMetadata::new()};
         multiverse.push_front(timepoint);
-        let player_timewaves = PlayerArr::new(Timewave{time: 0, speed: 1});
         let mut timewaves = VecDeque::new();
         timewaves.push_front(Timewave{time:0, speed: 2});//initial right-edge timewave
-        Timeline{multiverse, left_edge: 0, right_edge: 1, present: 0, player_timewaves, timewaves}
+        let player_timewaves = PlayerArr::new(Timewave{time: 0, speed: 1});
+        let chrono_energy = PlayerArr::new(450);
+        Timeline{multiverse, left_edge: 0, right_edge: 1, present: 0, timewaves, player_timewaves, chrono_energy}
     }
     fn exists(&self, time: ChronalTime) -> bool{
         let index = (time - self.left_edge) as usize;
@@ -41,6 +45,27 @@ impl Timeline{
         &mut self.multiverse[(time - self.left_edge) as usize]
     }
 
+    pub fn get_metadata(&self, time: ChronalTime) -> &SimMetadata{
+        if self.exists(time) {
+            &self.multiverse[(time - self.left_edge) as usize].metadata
+        } else {
+            self.get_metadata(time - 1)
+        }
+    }
+    pub fn chrono_cost(&self, time: ChronalTime) -> ChronoEnergy{
+        if time < self.present {
+            (self.present - time) as ChronoEnergy
+        } else {
+            0
+        }
+    }
+    pub fn chrono_energy_limit(&self, energy: ChronoEnergy) -> ChronalTime{
+        if self.present > (energy as ChronalTime) {
+            self.present - (energy as ChronalTime)
+        } else {
+            0
+        }
+    }
     //returns if successful. On failure, destroy this timewave (or reset its speed to 1 if player)
     //adds the times needed to the BTreeSet to be evaluated afterwards
     fn timecheck(&mut self, wave: Timewave, times_wanted: &mut BTreeSet<ChronalTime> ) -> bool{
@@ -55,16 +80,26 @@ impl Timeline{
         }
         return true;
     }
-    pub fn evaluate_timestep(&mut self, commands: Vec<AchronalEvent>){
-        //first evaluate events
-        for event in commands{
-            match event{
+    pub fn evaluate_timestep(&mut self, commands: Vec<AchronalCommand>){
+        //regenerate chronoenergy
+        for player in Player::values(){
+            if self.chrono_energy[player] < MAX_CHRONOENERGY{
+                self.chrono_energy[player] += 1;
+            }
+        }
+        //first evaluate events/orders that have been through the buffer
+        for order in commands{
+            match order.event{
                 AchronalEvent::Chronal(data) => {
-                    let timepoint = self.get_time_mut(data.time);
-                    timepoint.commands.push(data.command);
+                    let cost = self.chrono_cost(data.time);
+                    if cost < self.chrono_energy[order.player] {
+                        self.chrono_energy[order.player] -= cost;
+                        let timepoint = self.get_time_mut(data.time);
+                        timepoint.commands.push(data.command);
+                    }
                 },
                 AchronalEvent::Timejump(data) => {
-                    self.player_timewaves[data.player].time = data.time_to;
+                    self.player_timewaves[order.player].time = data;
                 },
             }
         }

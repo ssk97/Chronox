@@ -63,7 +63,7 @@ impl Default for Config{
         let interface = InterfaceConfig{
             scroll_speed: 2.0,
             colors: vec![0x808080, 0xFF0000, 0x00FF00, 0x0000FF, 0xC0C000],
-            ui_height: 100,
+            ui_height: 100, energy_bar_height: 20,
             width: 1200, height: 700
         };
         Config{

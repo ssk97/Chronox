@@ -29,15 +29,13 @@ pub struct ChronalEvent{
 
 //achronal events
 #[derive(Serialize, Deserialize, Debug,  PartialEq)]
-pub struct TimejumpCommand{
-    pub player: Player,
-    pub time_to: ChronalTime,
-}
-
-#[derive(Serialize, Deserialize, Debug,  PartialEq)]
 pub enum AchronalEvent{
     Chronal(ChronalEvent),
-    Timejump(TimejumpCommand),
+    Timejump(ChronalTime), //gives a time directly, no backing struct
 }
-
-pub type CommandBuffer = VecDeque<Vec<AchronalEvent>>;
+#[derive(Serialize, Deserialize, Debug,  PartialEq)]
+pub struct AchronalCommand{
+    pub player: Player,
+    pub event: AchronalEvent,
+}
+pub type CommandBuffer = VecDeque<Vec<AchronalCommand>>;

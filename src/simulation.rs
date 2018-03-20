@@ -18,15 +18,15 @@ pub const ARMY_SPEED: i32 = 100;
 pub const SPAWN_NEEDED: u32 = 64;
 
 pub struct SimMetadata{
-    pub total_planet: PlayerArr<u32>,
-    pub total_dead: PlayerArr<u32>,
-    pub total_transit: PlayerArr<u32>,
+    pub total_living: PlayerArr<u32>,
+    pub total_died: PlayerArr<u32>,
 }
 impl SimMetadata{
-    pub fn new()->SimMetadata{
-        SimMetadata{total_planet: PlayerArr::new(0), total_dead:PlayerArr::new(0), total_transit:PlayerArr::new(0)}
+    pub fn new() -> SimMetadata{
+        SimMetadata{total_living: PlayerArr::new(0), total_died: PlayerArr::new(0)}
     }
 }
+
 #[derive(Copy, Clone)]
 pub struct Planet {
     pub loc: Ipt,
@@ -53,7 +53,7 @@ impl Planet{
             spawn_progress: 0,
         }
     }
-    fn advance(&mut self, total_planet: &mut PlayerArr<u32>, total_dead: &mut PlayerArr<u32>){
+    fn advance(&mut self, total_living: &mut PlayerArr<u32>, total_dead: &mut PlayerArr<u32>){
         //if owned, spawn more
         if self.owner != Player::PASSIVE {
             self.spawn_progress += 10;
@@ -67,7 +67,7 @@ impl Planet{
         //fight!
         let sides_found = find_sides_node(&self);
         for side in sides_found.clone(){
-            total_planet[side] += self.count[side];
+            total_living[side] += self.count[side];
         }
         let sides_count = sides_found.len();
         if sides_count < 2{//zero out all fighting progress if no battle
@@ -183,16 +183,15 @@ impl Simulation{
     //given self, advance a timestep and return the new Simulation representing it
     pub fn update(&self, orders: &Vec<ChronalCommand>) -> (Simulation, SimMetadata) {
         let mut transfer_set: Vec<(NodeInd, Player, u32)> = Vec::new();
-        let mut metadata = SimMetadata::new();
+        let mut total_planet = PlayerArr::new(0);
+        let mut total_transit = PlayerArr::new(0);
+        let mut total_died = PlayerArr::new(0);
         let mut new_world: WorldGraph;
         {//metadata borrow scope
-            let total_dead = &mut metadata.total_dead;
-            let total_planet = &mut metadata.total_planet;
-            let total_transit = &mut metadata.total_transit;
             new_world = self.world.map(
                 |_node_ind, node| {
                     let mut new_node = node.clone();
-                    new_node.advance(total_planet, total_dead);
+                    new_node.advance(&mut total_planet, &mut total_died);
                     new_node
                 },
                 |edge_ind, edge| {
@@ -247,6 +246,8 @@ impl Simulation{
                 }
             }
         }
+        let total_living = Player::map_from_fn(|player| total_planet[player] + total_transit[player]);
+        let metadata = SimMetadata{total_died, total_living};
         (Simulation{world: new_world, timestep: self.timestep+1}, metadata)
     }
     pub fn check_planets(&self, pos: Ipt, max_dist: i32) -> Option<NodeInd>{

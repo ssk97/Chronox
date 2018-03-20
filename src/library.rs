@@ -33,15 +33,19 @@ pub fn progress(val: f32, lower: f32, upper: f32) -> f32{
     let total = upper-lower;
     amount/total
 }
+pub fn lerp(val: f32, lower: f32, upper: f32) -> f32{
+    let spread = upper-lower;
+    (val*spread)+lower
+}
 
-pub struct NumericFont{ //Used for drawing rapidly-changing text via a pre-rendered font
+pub struct PrerenderedFont{ //Used for drawing rapidly-changing text via a pre-rendered font
     glyphs: Vec<Text>,
     widths: Vec<f32>,
     maxw: f32,
     maxh: f32
 }
-impl NumericFont{
-    pub fn new(ctx: &mut Context, font: &Font) -> GameResult<NumericFont>{
+impl PrerenderedFont{
+    pub fn new(ctx: &mut Context, font: &Font) -> GameResult<PrerenderedFont>{
         let mut glyphs = Vec::new();
         let mut widths = Vec::new();
         let mut maxh = 0;
@@ -53,7 +57,7 @@ impl NumericFont{
             widths.push(glyph.width() as f32);
             glyphs.push(glyph);
         }
-        Ok(NumericFont {glyphs, widths, maxw: maxw as f32, maxh: maxh as f32})
+        Ok(PrerenderedFont {glyphs, widths, maxw: maxw as f32, maxh: maxh as f32})
     }
     pub fn draw<N: Into<u64>>(&self, ctx: &mut Context, loc: Point2, number: N) -> GameResult<()>{
         let mut stack = Vec::new();
