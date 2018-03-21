@@ -34,12 +34,14 @@ pub struct GameInterface{
     pub center_loc: Vector2,
     keyboard: KeyboardStates,
 }
-
-fn chronal_event(command: ChronalCommand, timestep: ChronalTime, player: Player, orders: &mut CommandBuffer){
-    let event = ChronalEvent{time: timestep+(orders.len() as ChronalTime), command};
-    let event = AchronalEvent::Chronal(event);
-    let order = AchronalCommand{player, event};
+fn add_order(order: AchronalCommand, orders: &mut CommandBuffer){
     orders.back_mut().unwrap().push(order);
+
+}
+fn chronal_event(command: ChronalCommand, player: Player, orders: &mut CommandBuffer){
+    let event = AchronalCommandTypes::Chronal(command);
+    let order = AchronalCommand{player, event};
+    add_order(order, orders);
 }
 impl GameInterface {
     pub fn new() -> GameInterface {
@@ -67,9 +69,9 @@ impl GameInterface {
             let x_pos = (pt.x as f32)/width;
             let time = x_pos*((timeline.right_edge - timeline.left_edge) as f32);
             let time_to = (time as ChronalTime)+timeline.left_edge;
-            let event = AchronalEvent::Timejump(time_to);
+            let event = AchronalCommandTypes::Timejump(time_to);
             let command = AchronalCommand{event, player};
-            orders.back_mut().unwrap().push(command);
+            add_order(command, orders);
 
         } else {
             let world_pt = pt + na::Vector2::new(self.center_loc.x.round() as i32, self.center_loc.y.round() as i32);
@@ -80,16 +82,17 @@ impl GameInterface {
                         if let Some(next) = next_o {
                             if next != selected {
                                 if sim.world.contains_edge(selected, next) {
-                                    let transport = TransportCommand { player, from: selected, to: next, percent: 50 };
-                                    let command = ChronalCommand::Transport(transport);
-                                    chronal_event(command, sim.timestep, player, orders);
+                                    let transport = TransportCommand { to: next, percent: 50 };
+                                    let command = ChronalCommandTypes::Transport(transport);
+                                    let event = ChronalCommand{time: sim.timestep+(orders.len() as ChronalTime), target: self.selected, player, command};
+                                    chronal_event(event, player, orders);
                                 }
                             }
                         }
                     }
                     MouseButton::Right => {
                         let next_o = sim.check_planets(world_pt, 96);
-                        let mut send_all = SendAllCommand { player, from: selected, to: None };
+                        let mut send_all = SendAllCommand {to: None };
                         if let Some(next) = next_o {
                             if next != selected {
                                 if sim.world.contains_edge(selected, next) {
@@ -97,8 +100,9 @@ impl GameInterface {
                                 }
                             }
                         }
-                        let command = ChronalCommand::SendAll(send_all);
-                        chronal_event(command, sim.timestep, player, orders);
+                        let command = ChronalCommandTypes::SendAll(send_all);
+                        let event = ChronalCommand{time: sim.timestep+(orders.len() as ChronalTime), target: self.selected, player, command};
+                        chronal_event(event, player, orders);
                     }
                     _ => {},
                 }
@@ -106,14 +110,27 @@ impl GameInterface {
             self.selected = None;
         }
     }
-    pub fn mouse_down(&mut self, button: MouseButton, pt: Ipt, player: Player, timeline: &Timeline, _orders: &mut CommandBuffer, conf: &InterfaceConfig) {
+    pub fn mouse_down(&mut self, button: MouseButton, pt: Ipt, player: Player, timeline: &Timeline, orders: &mut CommandBuffer, conf: &InterfaceConfig) {
         let sim = &timeline[player];
         if pt.y > (conf.height - conf.ui_height) {
             self.selected = None;
         } else {
-            let world_pt = pt + na::Vector2::new(self.center_loc.x.round() as i32, self.center_loc.y.round() as i32);
             if button == MouseButton::Left || button == MouseButton::Right {
-                self.selected = sim.check_planets(world_pt, 96);
+                let world_pt = pt + na::Vector2::new(self.center_loc.x.round() as i32, self.center_loc.y.round() as i32);
+                let selection = sim.check_planets(world_pt, 96);
+                if let Some(prev_selected) = self.selected {
+                    if let Some(this_selection) = selection{
+                        if this_selection == prev_selected{
+                            let clear = ClearCommand{time: sim.timestep+(orders.len() as ChronalTime),target:this_selection };
+                            let event = AchronalCommandTypes::ClearCommands(clear);
+                            let command = AchronalCommand{event, player};
+                            add_order(command, orders);
+                        }
+                    }
+                    self.selected = None;
+                } else {
+                    self.selected = selection;
+                }
             }
         }
     }

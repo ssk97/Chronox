@@ -6,6 +6,8 @@ use std::cmp::*;
 use std::collections::HashMap;
 use num::Num;
 
+pub const PI:f32 = 3.14159265358979323846264338327950288419716939937510582097494459230781640628620899;
+
 pub type Ipt = na::Point2<i32>;
 pub fn pt(x: f32, y: f32) -> Point2{
     return Point2::new(x, y);
@@ -23,6 +25,10 @@ pub fn dist2<T: na::Scalar+Num>(a: &na::Point2<T>, b: &na::Point2<T>) -> T{
     let x = a.x-b.x;
     let y = a.y-b.y;
     (x*x)+(y*y)
+}
+pub fn pt_dir(a: &Point2, b: &Point2) -> f32{
+    let v = b-a;
+    v.y.atan2(v.x)
 }
 pub fn lendir(len: f32, dir: f32) -> Vector2
 {

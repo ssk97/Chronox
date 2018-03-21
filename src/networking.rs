@@ -82,50 +82,55 @@ impl NetworkManager{
         let turn = turn_t as usize;
         let mut rec_orders: CommandBuffer = deserialize_from(&buf[8..]).unwrap();
         let from = max(turn, rec_turn);
-        let to = min(turn+conf.command_delay, rec_turn+rec_orders.len());
-        println!("from:{},to:{},rec_orders:{},orders:{},recieved:{:?}",from, to, rec_orders.len(), orders.len(), self.received);
+        let to = rec_turn+conf.command_delay;
+        println!("myturn:{},rec_turn:{},to:{},rec_orders:{},orders:{},recieved:{:?}",turn, rec_turn, to, rec_orders.len(), orders.len(), self.received);
         for i in from..to{
             let mine = i-turn;
             let rec = i-rec_turn;
+            if orders.len() <= mine{
+                orders.push_back(Vec::new());
+                self.received.push_back(true);
+            } else {
+                self.received[mine] = true;
+            }
             for o in rec_orders[rec].drain(0..){
                 if !orders[mine].contains(&o){
                     orders[mine].push(o);
                 }
-            }
-            if !self.received[mine] {
-                self.received[mine] = true;
             }
         }
     }
     pub fn receive_commands(&mut self, orders: &mut CommandBuffer, turn: u64, conf: &SystemConfig){
         let mut buf = [0; 512];
         //first check if someone is connecting to us
-        match self.sock.recv_from(&mut buf) {
-            Ok(n) => {
-                let (number_of_bytes, src_addr) = n;
-                if buf[0] == PACKET_ORDER{
-                    match src_addr{
-                        SocketAddr::V4(src_addr_v4) =>{
-                            if src_addr_v4 != self.target {
-                                println!("Packet from {}, but connected to {}", self.target, &src_addr_v4);
-                            }
-                            let reader = &buf[1..number_of_bytes];
-                            self.process_commands(orders, reader, turn, conf);
-                        },
-                        SocketAddr::V6(_) => println!("Packet received from ipv6, discarding"),
+        loop {
+            match self.sock.recv_from(&mut buf) {
+                Ok(n) => {
+                    let (number_of_bytes, src_addr) = n;
+                    if buf[0] == PACKET_ORDER {
+                        match src_addr {
+                            SocketAddr::V4(src_addr_v4) => {
+                                if src_addr_v4 != self.target {
+                                    println!("Packet from {}, but connected to {}", self.target, &src_addr_v4);
+                                }
+                                let reader = &buf[1..number_of_bytes];
+                                self.process_commands(orders, reader, turn, conf);
+                            },
+                            SocketAddr::V6(_) => println!("Packet received from ipv6, discarding"),
+                        }
+                    } else {
+                        println!("Unknown packet received from {} (first byte {})", &src_addr, buf[0]);
                     }
-                    println!("Connected!");
-                } else {
-                    println!("Unknown packet received from {} (first byte {})", &src_addr, buf[0]);
                 }
+                Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
+                    break;
+                    // wait until network socket is ready, typically implemented
+                    // via platform-specific APIs such as epoll or IOCP
+                    //wait_for_fd();
+                    //println!("no socket data");
+                }
+                Err(e) => println!("encountered IO error: {}", e),
             }
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                // wait until network socket is ready, typically implemented
-                // via platform-specific APIs such as epoll or IOCP
-                //wait_for_fd();
-                //println!("no socket data");
-            }
-            Err(e) => println!("encountered IO error: {}", e),
         }
     }
     pub fn send_commands(&mut self, orders: &CommandBuffer, turn: u64){

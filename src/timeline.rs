@@ -22,6 +22,7 @@ pub struct Timeline{
     pub timewaves: VecDeque<Timewave>,
     pub player_timewaves: PlayerArr<Timewave>,
     pub chrono_energy: PlayerArr<ChronoEnergy>,
+    next_wave: i64,//current time of the next timewave to spawn (should be < left_edge)
 }
 impl Timeline{
     pub fn new(starting: Simulation) -> Timeline{
@@ -32,7 +33,7 @@ impl Timeline{
         timewaves.push_front(Timewave{time:0, speed: 2});//initial right-edge timewave
         let player_timewaves = PlayerArr::new(Timewave{time: 0, speed: 1});
         let chrono_energy = PlayerArr::new(450);
-        Timeline{multiverse, left_edge: 0, right_edge: 1, present: 0, timewaves, player_timewaves, chrono_energy}
+        Timeline{multiverse, left_edge: 0, right_edge: 1, present: 0, timewaves, player_timewaves, chrono_energy, next_wave: -1}
     }
     fn exists(&self, time: ChronalTime) -> bool{
         let index = (time - self.left_edge) as usize;
@@ -89,17 +90,33 @@ impl Timeline{
         }
         //first evaluate events/orders that have been through the buffer
         for order in commands{
+            let player = order.player;
             match order.event{
-                AchronalEvent::Chronal(data) => {
+                AchronalCommandTypes::Chronal(data) => {
                     let cost = self.chrono_cost(data.time);
-                    if cost < self.chrono_energy[order.player] {
-                        self.chrono_energy[order.player] -= cost;
+                    if cost < self.chrono_energy[player] {
+                        self.chrono_energy[player] -= cost;
                         let timepoint = self.get_time_mut(data.time);
-                        timepoint.commands.push(data.command);
+                        timepoint.commands.push(data);
                     }
                 },
-                AchronalEvent::Timejump(data) => {
-                    self.player_timewaves[order.player].time = data;
+                AchronalCommandTypes::Timejump(data) => {
+                    self.player_timewaves[player].time = data;
+                },
+                AchronalCommandTypes::ClearCommands(data) => {
+                    let cost = self.chrono_cost(data.time);
+                    if cost < self.chrono_energy[player] {
+                        self.chrono_energy[player] -= cost;
+                        let left_edge = self.left_edge;
+                        let from_time = (data.time - left_edge) as usize;
+                        for i in from_time..self.multiverse.len() {
+                            let m = &mut self.multiverse[i];
+                            m.commands.retain(|command_data: &ChronalCommand| {
+                                debug_assert_eq!((i as ChronalTime) + left_edge, command_data.time);
+                                (player != command_data.player || command_data.target != Some(data.target))
+                            });
+                        }
+                    }
                 },
             }
         }
@@ -113,8 +130,10 @@ impl Timeline{
         }
         self.present += 1;
 
-        if (self.present+self.left_edge)%40 == 0{//Current increments by 2 so won't skip... FOR NOW
-            self.timewaves.push_front(Timewave{time:self.left_edge+1, speed: 3});//TODO: make not skip ever
+        self.next_wave += 3;
+        if (self.left_edge as i64) < self.next_wave{
+            self.next_wave -= 40;
+            self.timewaves.push_front(Timewave{time:self.left_edge, speed: 3});
         }
 
         //move timewaves forward

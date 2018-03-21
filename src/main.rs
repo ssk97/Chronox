@@ -159,7 +159,7 @@ impl MainState {
         self.last_turn = now;
     }
     fn reset_time(&mut self){
-        self.last_instant = time::Instant::now();;
+        self.last_instant = time::Instant::now();
         self.residual_update_dt = time::Duration::from_secs(0);
 
     }
@@ -183,6 +183,7 @@ impl MainState {
                     true
                 } else {
                     n.send_commands(&mut self.orders, self.turn);
+                    self.last_turn = time::Instant::now();//stop dt-prediction
                     false
                 }
             } else {
@@ -215,7 +216,11 @@ impl event::EventHandler for MainState {
                 while self.check_update() {
                     self.turn_tick();
                     self.orders.push_back(Vec::new());
-                    self.timeline.evaluate_timestep(self.orders.pop_front().unwrap());
+                    let orders_this_turn = self.orders.pop_front().unwrap();
+                    if orders_this_turn.len() > 0 {
+                        println!("process command on turn {}", self.turn)
+                    }
+                    self.timeline.evaluate_timestep(orders_this_turn);
                     self.send_commands();
                 }
             }

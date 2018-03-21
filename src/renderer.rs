@@ -91,6 +91,19 @@ impl Renderer {
                     angle += angle_increment;
                 }
             }
+
+            for (i, player) in Player::values().enumerate(){
+                if let Some(target) = node.send_all[player]{
+                    let node_to = &sim.world[target];
+                    let node_loc_to = screen(gpt(node_to.loc));
+                    let angle = pt_dir(&node_loc, &node_loc_to);
+                    let pt = node_loc+((node_loc_to-node_loc).normalize()*(80.+(i as f32)*5.));
+
+                    set_col(ctx, conf, player)?;
+                    line(ctx, &[pt+lendir(-10., angle+PI/5.), pt, pt+lendir(-10., angle-PI/5.)], 2.)?;
+
+                }
+            }
         }
 
         //draw selection

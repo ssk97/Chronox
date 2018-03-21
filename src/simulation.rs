@@ -235,13 +235,21 @@ impl Simulation{
             }
 
             for order in orders {
-                match order {
-                    &ChronalCommand::Transport(ref data) => {
-                        send_out(&mut new_world, data.from, data.to, data.player, data.percent);
+                match order.command {
+                    ChronalCommandTypes::Transport(ref data) => {
+                        if let Some(target) = order.target{
+                            send_out(&mut new_world, target, data.to, order.player, data.percent);
+                        } else {
+                            panic!("Illegal transport command with no origin")
+                        }
                     }
-                    &ChronalCommand::SendAll(ref data) => {
-                        let node = &mut new_world[data.from];
-                        node.send_all[data.player] = data.to;
+                    ChronalCommandTypes::SendAll(ref data) => {
+                        if let Some(target) = order.target{
+                            let node = &mut new_world[target];
+                            node.send_all[order.player] = data.to;
+                        } else {
+                            panic!("Illegal transport command with no origin")
+                        }
                     }
                 }
             }
