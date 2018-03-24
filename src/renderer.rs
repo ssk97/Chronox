@@ -14,7 +14,7 @@ struct GlobalResources{
 impl GlobalResources{
     fn new(ctx: &mut Context) -> GameResult<GlobalResources>{
         let font =  graphics::Font::new(ctx, "/Tuffy.ttf", 24)?;
-        let num_font = PrerenderedFont::new(ctx, &font, "0123456789")?;
+        let num_font = PrerenderedFont::new(ctx, &font, "0123456789%")?;
         let small_font =  graphics::Font::new(ctx, "/Tuffy.ttf", 16)?;
         let small_num_font = PrerenderedFont::new(ctx, &small_font, "0123456789:")?;
         let g = GlobalResources { font, num_font, small_num_font};
@@ -219,7 +219,10 @@ impl Renderer {
                 set_color(ctx, Color::from_rgba(255, 128, 0, 255))?;
                 rectangle(ctx, DrawMode::Fill, Rect::new(0.,upper_edge_bar, per_action_x, energy_bar_height))?;
             }
-
+            //percentage display
+            let font_height = self.resources.num_font.maxh;
+            set_color(ctx, Color::from_rgba(255, 255, 255, 255))?;
+            self.resources.num_font.draw(ctx, pt(0., upper_edge_bar-font_height), format!("{}%",interface.send_percent))?;
         }
 
         Ok(())

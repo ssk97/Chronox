@@ -5,8 +5,7 @@ pub use ggez::nalgebra as na;
 use std::cmp::*;
 use std::collections::HashMap;
 use num::Num;
-
-pub const PI:f32 = 3.14159265358979323846264338327950288419716939937510582097494459230781640628620899;
+pub use std::f32::consts::PI as PI;
 
 pub type Ipt = na::Point2<i32>;
 pub fn pt(x: f32, y: f32) -> Point2{
@@ -44,6 +43,14 @@ pub fn lerp(val: f32, lower: f32, upper: f32) -> f32{
     let spread = upper-lower;
     (val*spread)+lower
 }
+pub fn bound<T: PartialOrd>(val: T, min: T, max: T) -> T{
+    if val < min{
+        return min;
+    } else if val > max{
+        return max;
+    }
+    return val;
+}
 
 struct Glyph{
     text: Text,
@@ -51,8 +58,8 @@ struct Glyph{
 }
 pub struct PrerenderedFont{ //Used for drawing rapidly-changing text via a pre-rendered font
     glyphs: HashMap<char, Glyph>,
-    maxw: f32,
-    maxh: f32
+    pub maxw: f32,
+    pub maxh: f32
 }
 impl PrerenderedFont{
     pub fn new(ctx: &mut Context, font: &Font, chars: &str) -> GameResult<PrerenderedFont>{

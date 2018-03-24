@@ -32,6 +32,7 @@ pub struct InterfaceConfig{
 pub struct GameInterface{
     pub selected: Option<NodeInd>,
     pub center_loc: Vector2,
+    pub send_percent: i32,
     keyboard: KeyboardStates,
 }
 fn add_order(order: AchronalCommand, orders: &mut CommandBuffer){
@@ -45,7 +46,7 @@ fn chronal_event(command: ChronalCommand, player: Player, orders: &mut CommandBu
 }
 impl GameInterface {
     pub fn new() -> GameInterface {
-        GameInterface { selected: None, center_loc: Vector2::new(0., 0.), keyboard: KeyboardStates::new(false) }
+        GameInterface { selected: None, center_loc: Vector2::new(0., 0.), keyboard: KeyboardStates::new(false), send_percent: 50 }
     }
 
     pub fn update(&mut self, conf: &InterfaceConfig) {
@@ -82,7 +83,7 @@ impl GameInterface {
                         if let Some(next) = next_o {
                             if next != selected {
                                 if sim.world.contains_edge(selected, next) {
-                                    let transport = TransportCommand { to: next, percent: 50 };
+                                    let transport = TransportCommand { to: next, percent: (self.send_percent as u8) };
                                     let command = ChronalCommandTypes::Transport(transport);
                                     let event = ChronalCommand{time: sim.timestep+(orders.len() as ChronalTime), target: self.selected, player, command};
                                     chronal_event(event, player, orders);
@@ -138,6 +139,10 @@ impl GameInterface {
         if state.middle() {
             self.center_loc -= rel;
         }
+    }
+    pub fn mouse_wheel(&mut self, amount: i32){
+        self.send_percent += amount*10;
+        self.send_percent = bound(self.send_percent, 10, 100);
     }
 
     pub fn key_down(&mut self, keycode: Keycode) {

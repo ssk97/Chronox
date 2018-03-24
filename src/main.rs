@@ -273,7 +273,9 @@ impl event::EventHandler for MainState {
         yrel: i32, ) {
         self.interface.mouse_move(state, Vector2::new(xrel as f32, yrel as f32));
     }
-
+    fn mouse_wheel_event(&mut self, _ctx: &mut Context, _x: i32, _y: i32) {
+        self.interface.mouse_wheel(_y);
+    }
     //event::Mod to fix unresolved reference failure in IDE
     fn key_down_event(&mut self, _ctx: &mut Context, keycode: Keycode, _keymod: event::Mod, _repeat: bool) {
         if !_repeat{
