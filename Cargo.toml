@@ -1,5 +1,5 @@
 [package]
-name = "ggez_testing"
+name = "chronox"
 version = "0.1.0"
 authors = ["ssk97 <ssk97@case.edu>"]
 build = "build.rs"
